@@ -10,6 +10,7 @@ type CompaniesListResponse = { ok: boolean; data?: any[]; error?: string };
 export default function DashboardPage() {
   const [usersCount, setUsersCount] = useState<number>(0);
   const [companiesCount, setCompaniesCount] = useState<number>(0);
+  const [maturityTestsCount, setMaturityTestsCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +30,15 @@ export default function DashboardPage() {
         const cCount = companiesRes.ok && Array.isArray(companiesRes.data) ? companiesRes.data.length : 0;
         setUsersCount(uCount);
         setCompaniesCount(cCount);
+        // Contagem de testes de maturidade via localStorage
+        try {
+          const raw = localStorage.getItem('cyber:maturity:list');
+          const list = raw ? JSON.parse(raw) : [];
+          const mCount = Array.isArray(list) ? list.length : 0;
+          setMaturityTestsCount(mCount);
+        } catch (_) {
+          setMaturityTestsCount(0);
+        }
         if (!usersRes.ok || !companiesRes.ok) {
           setError(usersRes.error || companiesRes.error || "Falha ao carregar indicadores");
         } else {
@@ -65,9 +75,12 @@ export default function DashboardPage() {
           <div className="text-3xl font-bold text-green-700">{loading ? "-" : companiesCount}</div>
         </section>
 
-        <section className="p-4 bg-white rounded shadow">
-          <h2 className="font-semibold">Chamados</h2>
-          <p className="text-sm text-gray-600">Em breve: métricas de chamados.</p>
+        <section className="p-4 bg-white rounded shadow flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Teste de maturidade</h2>
+            <p className="text-sm text-gray-600">Total registrado</p>
+          </div>
+          <div className="text-3xl font-bold text-purple-700">{loading ? "-" : maturityTestsCount}</div>
         </section>
       </div>
     </main>
