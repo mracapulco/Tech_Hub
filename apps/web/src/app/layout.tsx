@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata = {
   title: 'Tech Hub',
   description: 'Plataforma técnica multi-empresa',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

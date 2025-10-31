@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b9cf5"/>
+      <stop offset="1" stop-color="#5be0ff"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#e9f3ff" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#lg)"/>
+  <!-- Simple techy blocks -->
+  <g opacity="0.85">
+    <rect x="120" y="420" width="140" height="90" rx="12" fill="url(#card)"/>
+    <rect x="300" y="380" width="160" height="110" rx="12" fill="url(#card)"/>
+    <rect x="500" y="440" width="140" height="80" rx="12" fill="url(#card)"/>
+  </g>
+  <g fill="#ffffff" opacity="0.6">
+    <circle cx="680" cy="160" r="8"/>
+    <circle cx="700" cy="190" r="6"/>
+    <circle cx="720" cy="170" r="5"/>
+  </g>
+  <!-- Placeholder phone -->
+  <rect x="360" y="140" width="160" height="260" rx="24" fill="#163a70" opacity="0.3"/>
+  <rect x="372" y="162" width="136" height="216" rx="16" fill="#ffffff" opacity="0.85"/>
+  <rect x="372" y="162" width="136" height="36" rx="12" fill="#5b9cf5" opacity="0.4"/>
+  <!-- Bars -->
+  <rect x="396" y="220" width="20" height="80" rx="6" fill="#5b9cf5"/>
+  <rect x="426" y="240" width="20" height="60" rx="6" fill="#4fd1c5"/>
+  <rect x="456" y="260" width="20" height="40" rx="6" fill="#f59e0b"/>
+  <rect x="486" y="230" width="20" height="70" rx="6" fill="#ef4444"/>
+  <!-- Decorative floating cards -->
+  <rect x="210" y="180" width="120" height="70" rx="14" fill="#ffffff" opacity="0.6"/>
+  <rect x="560" y="260" width="120" height="70" rx="14" fill="#ffffff" opacity="0.6"/>
+</svg>
