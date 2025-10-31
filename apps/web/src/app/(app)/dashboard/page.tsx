@@ -52,35 +52,35 @@ export default function DashboardPage() {
   return (
     <main>
       <h1 className="text-2xl font-bold">Dashboard principal</h1>
-      <p className="mt-2 text-gray-600">Aqui você verá um resumo de cada módulo.</p>
+      <p className="mt-2 text-muted">Aqui você verá um resumo de cada módulo.</p>
 
       {error && (
-        <p className="mt-4 text-sm text-red-600">{error}</p>
+        <p className="mt-4 text-sm text-error">{error}</p>
       )}
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <section className="p-4 bg-white rounded shadow flex items-center justify-between">
+        <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Usuários</h2>
-            <p className="text-sm text-gray-600">Total cadastrado</p>
+            <p className="text-sm text-muted">Total cadastrado</p>
           </div>
-          <div className="text-3xl font-bold text-blue-700">{loading ? "-" : usersCount}</div>
+          <div className="text-3xl font-bold text-primary">{loading ? "-" : usersCount}</div>
         </section>
 
-        <section className="p-4 bg-white rounded shadow flex items-center justify-between">
+        <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Empresas</h2>
-            <p className="text-sm text-gray-600">Total cadastrado</p>
+            <p className="text-sm text-muted">Total cadastrado</p>
           </div>
-          <div className="text-3xl font-bold text-green-700">{loading ? "-" : companiesCount}</div>
+          <div className="text-3xl font-bold text-success">{loading ? "-" : companiesCount}</div>
         </section>
 
-        <section className="p-4 bg-white rounded shadow flex items-center justify-between">
+        <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Teste de maturidade</h2>
-            <p className="text-sm text-gray-600">Total registrado</p>
+            <p className="text-sm text-muted">Total registrado</p>
           </div>
-          <div className="text-3xl font-bold text-purple-700">{loading ? "-" : maturityTestsCount}</div>
+          <div className="text-3xl font-bold text-primary">{loading ? "-" : maturityTestsCount}</div>
         </section>
       </div>
     </main>

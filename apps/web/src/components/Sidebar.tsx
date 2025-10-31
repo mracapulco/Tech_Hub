@@ -31,8 +31,8 @@ export default function Sidebar() {
   };
 
   return (
-    <div className={`flex flex-col ${collapsed ? 'w-16' : 'w-64'} h-screen bg-white border-r transition-all duration-200`}>
-      <div className="p-3 border-b flex items-center justify-between">
+    <div className={`flex flex-col ${collapsed ? 'w-16' : 'w-64'} h-screen bg-card border-r border-border transition-all duration-200`}>
+      <div className="p-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-block h-6 w-6">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6">
@@ -60,7 +60,7 @@ export default function Sidebar() {
       </div>
 
       {!collapsed && user && (
-        <div className="px-3 py-2 border-b text-sm text-gray-600">Olá, {user.name ?? user.username}</div>
+        <div className="px-3 py-2 border-b border-border text-sm text-muted">Olá, {user.name ?? user.username}</div>
       )}
 
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
@@ -101,8 +101,8 @@ export default function Sidebar() {
                 <path d="M12 3l2 4 4 .5-3 3 .7 4.5-3.7-2-3.7 2 .7-4.5-3-3 4-.5 2-4z" strokeWidth="2" strokeLinejoin="round" />
               </svg>
             </Link>
-            <div className="absolute left-full top-0 ml-2 w-48 bg-white border rounded shadow p-2 hidden group-hover:block z-50">
-              <div className="text-xs text-gray-500 px-1 pb-1">Configurações</div>
+            <div className="absolute left-full top-0 ml-2 w-48 bg-card border border-border rounded shadow p-2 hidden group-hover:block z-50">
+              <div className="text-xs text-muted px-1 pb-1">Configurações</div>
               <Link href="/configuracoes/usuarios" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Usuários">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
                   <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
@@ -146,14 +146,14 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className="p-2 border-t mt-auto space-y-1">
+      <div className="p-2 border-t border-border mt-auto space-y-1">
         <Link href="/perfil" className="flex items-center gap-3 px-2 py-2 rounded hover:bg-gray-100" title="Perfil">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
             <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
           </svg>
           {!collapsed && <span>Perfil</span>}
         </Link>
-        <button onClick={onLogout} className="flex items-center gap-3 w-full px-2 py-2 rounded hover:bg-gray-100 text-red-700" title="Sair">
+        <button onClick={onLogout} className="flex items-center gap-3 w-full px-2 py-2 rounded hover:bg-gray-100 text-error" title="Sair">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
             <path d="M10 17l5-5-5-5M4 12h11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

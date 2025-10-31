@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "title": "Avaliação de Maturidade em Segurança Cibernética",
+  "categories": [
+    {
+      "key": "governanca",
+      "name": "Governança",
+      "questions": [
+        {
+          "key": "politica",
+          "text": "Existe política formal de segurança da informação?",
+          "options": [
+            { "key": "nao", "label": "Não", "weight": 0 },
+            { "key": "parcial", "label": "Parcial", "weight": 1 },
+            { "key": "sim", "label": "Sim", "weight": 2 }
+          ]
+        },
+        {
+          "key": "responsavel",
+          "text": "Há responsável designado por segurança (formalmente)?",
+          "options": [
+            { "key": "nao", "label": "Não", "weight": 0 },
+            { "key": "parcial", "label": "Informal / parcial", "weight": 1 },
+            { "key": "sim", "label": "Sim", "weight": 2 }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "gestao-ativos",
+      "name": "Gestão de Ativos",
+      "questions": [
+        {
+          "key": "inventario",
+          "text": "Existe inventário atualizado de ativos de TI?",
+          "options": [
+            { "key": "nao", "label": "Não", "weight": 0 },
+            { "key": "parcial", "label": "Parcial", "weight": 1 },
+            { "key": "sim", "label": "Sim", "weight": 2 }
+          ]
+        },
+        {
+          "key": "classificacao",
+          "text": "Os dados/ativos são classificados por criticidade?",
+          "options": [
+            { "key": "nao", "label": "Não", "weight": 0 },
+            { "key": "parcial", "label": "Parcial", "weight": 1 },
+            { "key": "sim", "label": "Sim", "weight": 2 }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "gestao-riscos",
+      "name": "Gestão de Riscos",
+      "questions": [
+        {
+          "key": "metodologia",
+          "text": "Há metodologia definida para avaliação de riscos?",
+          "options": [
+            { "key": "nao", "label": "Não", "weight": 0 },
+            { "key": "parcial", "label": "Parcial", "weight": 1 },
+            { "key": "sim", "label": "Sim", "weight": 2 }
+          ]
+        },
+        {
+          "key": "tratamento",
+          "text": "Planos de tratamento são acompanhados e revisados?",
+          "options": [
+            { "key": "nao", "label": "Não", "weight": 0 },
+            { "key": "parcial", "label": "Parcial", "weight": 1 },
+            { "key": "sim", "label": "Sim", "weight": 2 }
+          ]
+        }
+      ]
+    }
+  ]
+}
