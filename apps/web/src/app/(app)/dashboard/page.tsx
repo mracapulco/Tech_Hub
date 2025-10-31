@@ -51,8 +51,8 @@ export default function DashboardPage() {
 
   return (
     <main>
-      <h1 className="text-2xl font-bold">Dashboard principal</h1>
-      <p className="mt-2 text-muted">Aqui você verá um resumo de cada módulo.</p>
+      <h1 className="text-2xl font-semibold">Dashboard principal</h1>
+      <p className="mt-2 text-sm text-gray-700">Aqui você verá um resumo de cada módulo.</p>
 
       {error && (
         <p className="mt-4 text-sm text-error">{error}</p>
@@ -62,7 +62,7 @@ export default function DashboardPage() {
         <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Usuários</h2>
-            <p className="text-sm text-muted">Total cadastrado</p>
+            <p className="text-sm font-medium text-gray-600">Total cadastrado</p>
           </div>
           <div className="text-3xl font-bold text-primary">{loading ? "-" : usersCount}</div>
         </section>
@@ -70,7 +70,7 @@ export default function DashboardPage() {
         <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Empresas</h2>
-            <p className="text-sm text-muted">Total cadastrado</p>
+            <p className="text-sm font-medium text-gray-600">Total cadastrado</p>
           </div>
           <div className="text-3xl font-bold text-success">{loading ? "-" : companiesCount}</div>
         </section>
@@ -78,7 +78,7 @@ export default function DashboardPage() {
         <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
           <div>
             <h2 className="font-semibold">Teste de maturidade</h2>
-            <p className="text-sm text-muted">Total registrado</p>
+            <p className="text-sm font-medium text-gray-600">Total registrado</p>
           </div>
           <div className="text-3xl font-bold text-primary">{loading ? "-" : maturityTestsCount}</div>
         </section>
