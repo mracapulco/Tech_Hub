@@ -9,3 +9,6 @@ apps/**/node_modules/
 apps/web/.next/
 apps/api/dist/
 docker/*.log
+uploads/*
+!uploads/.gitkeep
+tmp.png

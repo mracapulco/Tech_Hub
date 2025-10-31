@@ -1,0 +1,60 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TECHNICIAN
+  CLIENT
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String?  @unique
+  name      String
+  lastName  String?
+  password  String
+  avatarUrl String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships UserCompanyMembership[]
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  cnpj      String?  @unique
+  name      String
+  fantasyName String?
+  address   String?
+  city      String?
+  state     String?
+  zipcode   String?
+  phone     String?
+  logoUrl   String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships UserCompanyMembership[]
+}
+
+model UserCompanyMembership {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  role      Role
+  createdAt DateTime @default(now())
+
+  @@unique([userId, companyId])
+}
