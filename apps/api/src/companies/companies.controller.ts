@@ -51,7 +51,29 @@ export class CompaniesController {
     const items = await this.prisma.company.findMany({
       orderBy: { name: 'asc' },
     });
-    return { ok: true, data: items };
+
+    // Agregar contagem de usuários vinculados por empresa
+    const ids = items.map((i) => i.id);
+    let countsMap = new Map<string, number>();
+    if (ids.length > 0) {
+      const counts = await this.prisma.userCompanyMembership.groupBy({
+        by: ['companyId'],
+        where: { companyId: { in: ids } },
+        _count: { _all: true },
+      });
+      counts.forEach((c: any) => {
+        const companyId = c.companyId as string;
+        const total = c._count?._all ?? 0;
+        countsMap.set(companyId, total);
+      });
+    }
+
+    const withCounts = items.map((i: any) => ({
+      ...i,
+      membershipsCount: countsMap.get(i.id) ?? 0,
+    }));
+
+    return { ok: true, data: withCounts };
   }
 
   @Post()

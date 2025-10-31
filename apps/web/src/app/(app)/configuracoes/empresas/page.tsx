@@ -328,24 +328,34 @@ export default function EmpresasPage() {
             <table className="min-w-full border bg-white">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">CNPJ</th>
-                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Razão Social</th>
-                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Fantasia</th>
-                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Cidade/UF</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Logo</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Nome Fantasia</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Usuários</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Estado</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Cidade</th>
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Telefone</th>
-                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Criado em</th>
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {companies.map((c) => (
                   <tr key={c.id} className="border-b">
-                    <td className="px-4 py-2 text-sm">{c.cnpj || '-'}</td>
-                    <td className="px-4 py-2 text-sm">{c.name}</td>
+                    <td className="px-4 py-2 text-sm">
+                      {c.logoUrl ? (
+                        <img
+                          src={imgUrl(c.logoUrl)}
+                          alt={c.fantasyName || c.name || 'Logo'}
+                          className="h-10 w-10 object-contain"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded bg-gray-100 border"></div>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-sm">{c.fantasyName || '-'}</td>
-                    <td className="px-4 py-2 text-sm">{[c.city, c.state].filter(Boolean).join('/') || '-'}</td>
+                    <td className="px-4 py-2 text-sm">{typeof c.membershipsCount === 'number' ? c.membershipsCount : 0}</td>
+                    <td className="px-4 py-2 text-sm">{c.state || '-'}</td>
+                    <td className="px-4 py-2 text-sm">{c.city || '-'}</td>
                     <td className="px-4 py-2 text-sm">{c.phone || '-'}</td>
-                    <td className="px-4 py-2 text-sm">{c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
                     <td className="px-4 py-2 text-sm">
                       <Link href={`/configuracoes/empresas/${c.id}`} className="rounded bg-indigo-600 px-3 py-1 text-white hover:bg-indigo-700">
                         Visualizar
