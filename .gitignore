@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.env
+.env.*
+.DS_Store
+.vscode/
+coverage/
+apps/**/node_modules/
+apps/web/.next/
+apps/api/dist/
+docker/*.log

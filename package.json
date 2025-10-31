@@ -1,0 +1,14 @@
+{
+  "name": "tech-hub",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:web": "npm run dev --prefix apps/web",
+    "dev:api": "npm run dev --prefix apps/api",
+    "build:web": "npm run build --prefix apps/web",
+    "build:api": "npm run build --prefix apps/api",
+    "start:web": "npm run start --prefix apps/web",
+    "start:api": "npm run start:prod --prefix apps/api"
+  }
+}
