@@ -4,6 +4,20 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.0] — 2025-11-01
+
+### Adicionado
+- Maturidade: botão "Exportar" na visualização com opções PDF e CSV.
+- Maturidade (PDF): relatório formatado com logo da empresa, introdução e observação final.
+- Maturidade (CSV): exporta perguntas e respostas, mais resumo por grupo e geral.
+
+### Alterado
+- Login: textos e placeholders traduzidos para pt-BR ("Acesse sua conta", "Usuário ou e-mail", "Senha", "Esqueceu a senha?").
+
+### Observações
+- Versões atualizadas: root e web `0.3.0`; API permanece `0.2.0`.
+- Erros `net::ERR_ABORTED` em prefetch de rotas do Next.js são esperados e não afetam a funcionalidade.
+
 ## [0.2.1] — 2025-11-01
 
 ### Adicionado

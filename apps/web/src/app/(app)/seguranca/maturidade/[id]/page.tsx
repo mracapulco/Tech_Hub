@@ -19,6 +19,13 @@ type Assessment = {
 
 const STORAGE_KEY = 'cyber:maturity:list';
 
+function imgUrl(u?: string | null) {
+  if (!u) return '';
+  if (u.startsWith('http')) return u;
+  if (u.startsWith('/uploads')) return `${process.env.NEXT_PUBLIC_API_URL}${u}`;
+  return u;
+}
+
 function formatDate(yyyyMmDd: string) {
   const [y, m, d] = yyyyMmDd.split('-');
   if (!y || !m || !d) return yyyyMmDd;
@@ -167,6 +174,7 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
   const [item, setItem] = useState<Assessment | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTech, setIsTech] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const groupSummaries = useMemo(() => {
     const ans = item?.answers || {};
     return GROUPS.map((g) => {
@@ -238,6 +246,193 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
     }
   };
 
+  function answerLabel(v: 0 | 1 | 2 | undefined) {
+    if (v === 2) return 'Sim';
+    if (v === 1) return 'Parcial';
+    return 'Não';
+  }
+
+  function csvEscape(s: string) {
+    const val = s ?? '';
+    const needQuotes = /[",\n]/.test(val);
+    const escaped = val.replace(/"/g, '""');
+    return needQuotes ? `"${escaped}"` : escaped;
+  }
+
+  function exportCSV() {
+    if (!item) return;
+    const lines: string[] = [];
+    lines.push(['Empresa', item.companyName].map(csvEscape).join(','));
+    lines.push(['Data', formatDate(item.date)].map(csvEscape).join(','));
+    lines.push(['Criado em', new Date(item.createdAt).toLocaleString()].map(csvEscape).join(','));
+    lines.push('');
+    lines.push(['Grupo', 'Pergunta', 'Resposta', 'Valor'].map(csvEscape).join(','));
+    GROUPS.forEach((g) => {
+      g.questions.forEach((q) => {
+        const v = item.answers?.[key(g.id, q.id)] ?? 0;
+        const label = answerLabel(v);
+        lines.push([g.name, q.text, label, String(v)].map(csvEscape).join(','));
+      });
+    });
+    lines.push('');
+    lines.push(['Resumo por grupo', 'Pontuação', 'Máximo', 'Percentual', 'Tier'].map(csvEscape).join(','));
+    const summaries = GROUPS.map((g) => {
+      const score = g.questions.reduce((sum, q) => sum + (item.answers?.[key(g.id, q.id)] ?? 0), 0);
+      const max = g.questions.length * 2;
+      return { id: g.id, name: g.name, score, max };
+    });
+    summaries.forEach((s) => {
+      const percent = s.max > 0 ? Math.round((s.score / s.max) * 100) : 0;
+      const { label } = tierFromPercent(percent);
+      lines.push([s.name, String(s.score), String(s.max), `${percent}%`, label].map(csvEscape).join(','));
+    });
+    const totalScore = summaries.reduce((acc, s) => acc + s.score, 0);
+    const totalMax = summaries.reduce((acc, s) => acc + s.max, 0);
+    const totalPercent = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
+    const { label: totalTier } = tierFromPercent(totalPercent);
+    lines.push(['GERAL', String(totalScore), String(totalMax), `${totalPercent}%`, totalTier].map(csvEscape).join(','));
+
+    const csv = lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `maturidade_${item.companyName}_${item.date}.csv`.replace(/\s+/g, '_');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportPDF() {
+    if (!item) return;
+    const token = getToken();
+    let logoSrc = '';
+    try {
+      if (token && item.companyId) {
+        const res = await apiGet<{ ok: boolean; data?: any }>(`/companies/${item.companyId}`, token);
+        const company = res?.data;
+        if (company?.logoUrl) logoSrc = imgUrl(company.logoUrl);
+      }
+    } catch {}
+
+    const intro = `Este relatório tem como objetivo apresentar uma avaliação estruturada da maturidade em segurança cibernética da organização, com base no Framework de Cibersegurança do NIST (National Institute of Standards and Technology). A proposta é identificar o grau de aderência da empresa às melhores práticas de gestão de riscos cibernéticos, possibilitando o direcionamento de esforços estratégicos para fortalecer a resiliência digital da organização.`;
+    const intro2 = `A avaliação foi conduzida por meio de um questionário técnico, baseado nas cinco funções principais do NIST Cybersecurity Framework — Identificar, Proteger, Detectar, Responder e Recuperar — além de elementos de governança, conformidade regulatória e cultura organizacional. As respostas foram classificadas em três níveis: NÃO, PARCIAL e SIM, refletindo o estágio atual de implementação dos controles e processos analisados.`;
+    const intro3 = `Ao mapear o nível de maturidade de cada função, é possível gerar indicadores quantitativos e qualitativos que facilitam a priorização de iniciativas, bem como a alocação adequada de recursos. Essa abordagem não só contribui para o aprimoramento contínuo da segurança da informação, mas também fortalece a conformidade com normas internacionais como a ISO/IEC 27001, além de legislações como a LGPD (Lei Geral de Proteção de Dados).`;
+    const intro4 = `A proposta deste documento é servir como uma ferramenta prática de diagnóstico e planejamento, promovendo a transparência da postura de segurança atual da organização. Ele também permite a comparação evolutiva ao longo do tempo, bem como o alinhamento com os tiers de maturidade definidos pelo NIST, que vão do nível Inicial (Tier 1) ao Adaptativo (Tier 4). Dessa forma, reforça-se o compromisso com uma cultura de segurança proativa, resiliente e alinhada aos riscos do negócio.`;
+
+    const obs1 = `A avaliação de maturidade apresentada neste relatório oferece uma visão abrangente da postura atual da organização frente aos desafios da segurança cibernética. Ela serve como base concreta para decisões estratégicas e priorização de investimentos em controles, processos e treinamentos.`;
+    const obs2 = `Ao adotar o framework do NIST como referência, a organização se alinha com padrões internacionais reconhecidos, promovendo uma abordagem estruturada, mensurável e em constante evolução. A maturidade em segurança deve ser encarada como um processo contínuo, e não como um estado final.`;
+    const obs3 = `Recomenda-se que este diagnóstico seja revisitado periodicamente, permitindo a comparação entre ciclos e a evolução contínua do programa de segurança. O compromisso com a melhoria constante fortalece a resiliência organizacional e protege os ativos mais valiosos da empresa: seus dados, sua reputação e sua continuidade de negócios.`;
+
+    const summaries = GROUPS.map((g) => {
+      const score = g.questions.reduce((sum, q) => sum + (item.answers?.[key(g.id, q.id)] ?? 0), 0);
+      const max = g.questions.length * 2;
+      const percent = max > 0 ? Math.round((score / max) * 100) : 0;
+      const { label } = tierFromPercent(percent);
+      return { name: g.name, score, max, percent, tier: label };
+    });
+    const totalScore = summaries.reduce((acc, s) => acc + s.score, 0);
+    const totalMax = summaries.reduce((acc, s) => acc + s.max, 0);
+    const totalPercent = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
+    const { label: totalTier } = tierFromPercent(totalPercent);
+
+    const styles = `
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111827; }
+        .container { max-width: 900px; margin: 0 auto; padding: 24px; }
+        .header { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; }
+        .logo { height: 64px; object-fit: contain; }
+        h1 { font-size: 22px; margin: 0; }
+        h2 { font-size: 18px; margin: 24px 0 8px; }
+        p { font-size: 14px; line-height: 1.6; margin: 8px 0; }
+        .meta { margin-top: 8px; font-size: 12px; color: #374151; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th, td { border: 1px solid #e5e7eb; padding: 8px; font-size: 13px; }
+        th { background: #f9fafb; text-align: left; }
+        .summary { margin-top: 16px; }
+        .footer { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 12px; font-size: 12px; color: #6b7280; }
+        @page { margin: 16mm; }
+      </style>
+    `;
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório de Maturidade - ${item.companyName}</title>
+          ${styles}
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              ${logoSrc ? `<img src="${logoSrc}" class="logo" alt="Logo da empresa" />` : ''}
+              <div>
+                <h1>Relatório de Maturidade de Segurança – NIST</h1>
+                <div class="meta">Empresa: <strong>${item.companyName}</strong></div>
+                <div class="meta">Data: ${formatDate(item.date)} | Criado em: ${new Date(item.createdAt).toLocaleString()}</div>
+              </div>
+            </div>
+
+            <h2>Introdução</h2>
+            <p>${intro}</p>
+            <p>${intro2}</p>
+            <p>${intro3}</p>
+            <p>${intro4}</p>
+
+            <h2>Resumo por Grupo</h2>
+            <table class="summary">
+              <thead>
+                <tr><th>Categoria</th><th>Pontuação</th><th>Máximo</th><th>Percentual</th><th>Tier</th></tr>
+              </thead>
+              <tbody>
+                ${summaries.map(s => `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.max}</td><td>${s.percent}%</td><td>${s.tier}</td></tr>`).join('')}
+                <tr><td><strong>GERAL</strong></td><td>${totalScore}</td><td>${totalMax}</td><td>${totalPercent}%</td><td>${totalTier}</td></tr>
+              </tbody>
+            </table>
+
+            <h2>Detalhamento por Pergunta</h2>
+            ${GROUPS.map(g => `
+              <h3 style="font-size:16px;margin:16px 0 4px;">${g.name}</h3>
+              <p style="font-size:13px;color:#374151;margin:0 0 8px;">${g.objective}</p>
+              <table>
+                <thead><tr><th>Pergunta</th><th>Resposta</th></tr></thead>
+                <tbody>
+                  ${g.questions.map(q => {
+                    const v = item.answers?.[key(g.id, q.id)] ?? 0;
+                    const label = answerLabel(v);
+                    return `<tr><td>${q.text}</td><td>${label}</td></tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            `).join('')}
+
+            <h2>Observação final</h2>
+            <p>${obs1}</p>
+            <p>${obs2}</p>
+            <p>${obs3}</p>
+
+            <div class="footer">Relatório gerado por Tech Hub</div>
+          </div>
+          <script>
+            window.onload = function() { window.focus(); setTimeout(function(){ window.print(); }, 300); };
+          </script>
+        </body>
+      </html>
+    `;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('Não foi possível abrir a janela de impressão. Verifique o bloqueio de pop-ups.');
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
+
   if (!item) {
     return (
       <div className="p-4 space-y-4">
@@ -251,8 +446,17 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
     <div className="p-4 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Visualizar teste de maturidade</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <Link href="/seguranca/maturidade" className="px-3 py-2 rounded border">Voltar</Link>
+          <div className="relative">
+            <button onClick={() => setExportOpen((v) => !v)} className="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">Exportar</button>
+            {exportOpen && (
+              <div className="absolute right-0 mt-2 w-40 rounded-lg border border-border bg-white shadow">
+                <button onClick={() => { setExportOpen(false); exportPDF(); }} className="block w-full text-left px-3 py-2 hover:bg-gray-50">PDF</button>
+                <button onClick={() => { setExportOpen(false); exportCSV(); }} className="block w-full text-left px-3 py-2 hover:bg-gray-50">CSV</button>
+              </div>
+            )}
+          </div>
           {(isAdmin || isTech) && (
             <button onClick={onDelete} className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">Excluir</button>
           )}
