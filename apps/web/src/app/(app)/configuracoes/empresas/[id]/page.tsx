@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiGet, apiDelete } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, getUser } from "@/lib/auth";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -24,6 +24,10 @@ export default function EmpresaDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTech, setIsTech] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
 
   async function fetchCompanyDetails() {
     if (!id) return;
@@ -37,6 +41,7 @@ export default function EmpresaDetailPage() {
       const res = await apiGet<{ ok: boolean; data?: any; error?: string }>(`/companies/${id}`, token);
       if (res.ok) {
         setCompany(res.data);
+        await computePermissions();
       } else {
         setError(res.error || "Empresa não encontrada.");
       }
@@ -44,6 +49,28 @@ export default function EmpresaDetailPage() {
       setError("Falha ao carregar dados da empresa.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function computePermissions() {
+    const token = getToken();
+    const user = getUser();
+    if (!token || !user?.id) return;
+    try {
+      const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
+      const memberships = (res?.data?.memberships || []) as { role: string; companyId: string }[];
+      const admin = memberships.some((m) => m.role === 'ADMIN');
+      const tech = memberships.some((m) => m.role === 'TECHNICIAN');
+      const hasCompany = memberships.some((m) => m.companyId === id);
+      setIsAdmin(admin);
+      setIsTech(tech);
+      setCanEdit(admin || tech || hasCompany);
+      setCanDelete(admin);
+    } catch {
+      setIsAdmin(false);
+      setIsTech(false);
+      setCanEdit(false);
+      setCanDelete(false);
     }
   }
 
@@ -110,16 +137,20 @@ export default function EmpresaDetailPage() {
           >
             Voltar
           </button>
-          <Link href={`/configuracoes/empresas/${id}/editar`} className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-            Editar
-          </Link>
-          <button
-            onClick={checkDependencies}
-            disabled={deleting}
-            className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-          >
-            {deleting ? "Excluindo..." : "Excluir"}
-          </button>
+          {canEdit && (
+            <Link href={`/configuracoes/empresas/${id}/editar`} className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+              Editar
+            </Link>
+          )}
+          {canDelete && (
+            <button
+              onClick={checkDependencies}
+              disabled={deleting}
+              className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? "Excluindo..." : "Excluir"}
+            </button>
+          )}
         </div>
       </div>
 

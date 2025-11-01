@@ -43,6 +43,28 @@ API: http://localhost:4000  |  Web: http://localhost:3000
 
 > Observação: como o ambiente local não tem `npm` disponível no momento, recomenda-se utilizar os contêineres para desenvolvimento e testes.
 
+## Fluxo de versionamento
+
+- Branches principais:
+  - `main`: estável; releases saem daqui.
+  - `develop`: integração contínua das features antes de irem para `main`.
+- Branches de feature: `feature/<nome-da-feature>` criadas a partir de `develop`.
+- Pull Requests:
+  - Abra PRs de `feature/*` → `develop`.
+  - Quando `develop` estiver estável, abra PR de `develop` → `main`.
+- Versionamento semântico e tags:
+  - `vMAJOR.MINOR.PATCH` (ex.: `v1.0.0`).
+  - Criar tag: `git tag v1.0.0 && git push origin v1.0.0`.
+- Convenção de commits (recomendado):
+  - `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`, `refactor: ...`.
+
+## Proteções de branch
+
+- Em contas gratuitas, proteções avançadas em repositórios privados podem exigir GitHub Pro.
+- Alternativas:
+  - Manter privado e seguir as regras acima por convenção (PRs e revisões).
+  - Tornar o repositório público ou atualizar para GitHub Pro para habilitar proteções via GitHub.
+
 ## Próximos passos
 
 - Configurar Prisma e migrations

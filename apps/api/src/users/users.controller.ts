@@ -57,7 +57,24 @@ export class UsersController {
   @Get()
   async list(@Headers('authorization') authorization?: string) {
     if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const users = await this.prisma.user.findMany({ orderBy: { name: 'asc' } });
+    const requesterId = this.getUserIdFromAuthHeader(authorization);
+    if (!requesterId) return { ok: false, error: 'Unauthorized' };
+    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { companyId: true, role: true } });
+    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+    const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+    let users: any[] = [];
+    if (isAdmin || isTechnician) {
+      users = await this.prisma.user.findMany({ orderBy: { name: 'asc' } });
+    } else {
+      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
+      if (allowedCompanyIds.length === 0) {
+        users = await this.prisma.user.findMany({ where: { id: requesterId }, orderBy: { name: 'asc' } });
+      } else {
+        const relatedMemberships = await this.prisma.userCompanyMembership.findMany({ where: { companyId: { in: allowedCompanyIds } }, select: { userId: true } });
+        const userIds = Array.from(new Set(relatedMemberships.map((m: any) => m.userId)));
+        users = await this.prisma.user.findMany({ where: { id: { in: userIds } }, orderBy: { name: 'asc' } });
+      }
+    }
     return {
       ok: true,
       data: users.map((u) => ({ id: u.id, username: (u as any).username, name: u.name, lastName: (u as any).lastName ?? null, email: u.email, status: u.status })),
@@ -68,6 +85,11 @@ export class UsersController {
   @Post()
   async create(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
     if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
+    const requesterId = this.getUserIdFromAuthHeader(authorization);
+    if (!requesterId) return { ok: false, error: 'Unauthorized' };
+    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
+    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+    if (!isAdmin) return { ok: false, error: 'Forbidden' };
 
     const email = String(body.email || '').trim();
     const username = body.username ? String(body.username).trim() : null;
@@ -137,7 +159,7 @@ export class UsersController {
         email: user.email,
         status: user.status,
         avatarUrl: (user as any).avatarUrl ?? null,
-        memberships: memberships.map((m: any) => ({ companyId: m.companyId, companyName: m.company?.name, role: m.role })),
+        memberships: memberships.map((m: any) => ({ id: m.id, companyId: m.companyId, companyName: m.company?.name, role: m.role })),
       },
     };
   }
@@ -146,6 +168,12 @@ export class UsersController {
   @Put(':id')
   async update(@Param('id') id: string, @Headers('authorization') authorization: string | undefined, @Body() body: any) {
     if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
+    const requesterId = this.getUserIdFromAuthHeader(authorization);
+    if (!requesterId) return { ok: false, error: 'Unauthorized' };
+    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
+    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+    const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+    if (!(isAdmin || isTechnician || requesterId === id)) return { ok: false, error: 'Forbidden' };
     const data: any = {};
     if (body.email !== undefined) data.email = String(body.email).trim();
     if (body.username !== undefined) data.username = body.username ? String(body.username).trim() : null;
@@ -172,6 +200,11 @@ export class UsersController {
   @Delete(':id')
   async remove(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
+    const requesterId = this.getUserIdFromAuthHeader(authorization);
+    if (!requesterId) return { ok: false, error: 'Unauthorized' };
+    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
+    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+    if (!isAdmin) return { ok: false, error: 'Forbidden' };
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) return { ok: false, error: 'Usuário não encontrado.' };
     try {
@@ -204,5 +237,70 @@ export class UsersController {
       ok: true,
       user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null },
     };
+  }
+
+  // Adicionar vínculo empresa-usuário (ADMIN)
+  @Post(':id/memberships')
+  async addMembership(
+    @Param('id') id: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: { companyId?: string; role?: string },
+  ) {
+    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
+    const requesterId = this.getUserIdFromAuthHeader(authorization);
+    if (!requesterId) return { ok: false, error: 'Unauthorized' };
+    const reqMemberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
+    const isAdmin = reqMemberships.some((m: any) => m.role === 'ADMIN');
+    if (!isAdmin) return { ok: false, error: 'Forbidden' };
+
+    const companyId = body.companyId ? String(body.companyId).trim() : '';
+    const role = body.role ? String(body.role).trim() : 'CLIENT';
+    if (!companyId) return { ok: false, error: 'companyId é obrigatório.' };
+
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) return { ok: false, error: 'Usuário não encontrado.' };
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) return { ok: false, error: 'Empresa não encontrada.' };
+
+    // Evita duplicidade
+    const existing = await this.prisma.userCompanyMembership.findUnique({ where: { userId_companyId: { userId: id, companyId } } });
+    if (existing) return { ok: false, error: 'Usuário já vinculado a esta empresa.' };
+
+    try {
+      const created = await this.prisma.userCompanyMembership.create({ data: { userId: id, companyId, role: role as any } });
+      return { ok: true, data: { id: created.id, companyId, companyName: company.name, role: created.role } };
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('Erro ao adicionar vínculo:', e);
+      return { ok: false, error: 'Erro ao adicionar vínculo.' };
+    }
+  }
+
+  // Remover vínculo empresa-usuário (ADMIN)
+  @Delete(':id/memberships/:membershipId')
+  async removeMembership(
+    @Param('id') id: string,
+    @Param('membershipId') membershipId: string,
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
+    const requesterId = this.getUserIdFromAuthHeader(authorization);
+    if (!requesterId) return { ok: false, error: 'Unauthorized' };
+    const reqMemberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
+    const isAdmin = reqMemberships.some((m: any) => m.role === 'ADMIN');
+    if (!isAdmin) return { ok: false, error: 'Forbidden' };
+
+    const membership = await this.prisma.userCompanyMembership.findUnique({ where: { id: membershipId } });
+    if (!membership) return { ok: false, error: 'Vínculo não encontrado.' };
+    if (membership.userId !== id) return { ok: false, error: 'Vínculo não pertence ao usuário informado.' };
+
+    try {
+      await this.prisma.userCompanyMembership.delete({ where: { id: membershipId } });
+      return { ok: true };
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('Erro ao remover vínculo:', e);
+      return { ok: false, error: 'Erro ao remover vínculo.' };
+    }
   }
 }
