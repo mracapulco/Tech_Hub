@@ -43,15 +43,30 @@ export class CompaniesController {
   async list(@Headers('authorization') authorization?: string) {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
+    let items: any[] = [];
     try {
-      this.jwt.verify(token);
+      // Verifica e obtém payload para identificar o usuário
+      const payload: any = this.jwt.verify(token);
+      const userId: string | null = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
+      // Descobre os vínculos do usuário e se ele é ADMIN
+      const memberships = await this.prisma.userCompanyMembership.findMany({
+        where: { userId },
+        select: { companyId: true, role: true },
+      });
+      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
+      // Lista empresas conforme permissões: ADMIN vê todas, demais apenas seus vínculos
+      items = (isAdmin || isTechnician)
+        ? await this.prisma.company.findMany({ orderBy: { name: 'asc' } })
+        : await this.prisma.company.findMany({
+            where: { id: { in: allowedCompanyIds } },
+            orderBy: { name: 'asc' },
+          });
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }
-    const items = await this.prisma.company.findMany({
-      orderBy: { name: 'asc' },
-    });
-
     // Agregar contagem de usuários vinculados por empresa
     const ids = items.map((i) => i.id);
     let countsMap = new Map<string, number>();
@@ -84,7 +99,12 @@ export class CompaniesController {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
     try {
-      this.jwt.verify(token);
+      const payload: any = this.jwt.verify(token);
+      const userId: string | null = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
+      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
+      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      if (!isAdmin) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }
@@ -127,13 +147,25 @@ export class CompaniesController {
   ) {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
+    let userId: string | null = null;
     try {
-      this.jwt.verify(token);
+      const payload: any = this.jwt.verify(token);
+      userId = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
+    // Verifica acesso: ADMIN ou vínculo à empresa
+    const memberships = await this.prisma.userCompanyMembership.findMany({
+      where: { userId },
+      select: { companyId: true, role: true },
+    });
+    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+    const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+    const hasAccess = isAdmin || isTechnician || memberships.some((m: any) => m.companyId === id);
+    if (!hasAccess) return { ok: false, error: 'Forbidden' };
     return { ok: true, data: company };
   }
 
@@ -144,13 +176,22 @@ export class CompaniesController {
   ) {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
+    let userId: string | null = null;
     try {
-      this.jwt.verify(token);
+      const payload: any = this.jwt.verify(token);
+      userId = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
+    // Permite ADMIN ou usuário com vínculo à empresa
+    const membershipsUser = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
+    const isAdmin = membershipsUser.some((m: any) => m.role === 'ADMIN');
+    const isTechnician = membershipsUser.some((m: any) => m.role === 'TECHNICIAN');
+    const hasAccess = isAdmin || isTechnician || membershipsUser.some((m: any) => m.companyId === id);
+    if (!hasAccess) return { ok: false, error: 'Forbidden' };
     const memberships = await this.prisma.userCompanyMembership.findMany({
       where: { companyId: id },
       select: { id: true, userId: true, role: true },
@@ -177,7 +218,14 @@ export class CompaniesController {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
     try {
-      this.jwt.verify(token);
+      const payload: any = this.jwt.verify(token);
+      const userId: string | null = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
+      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true, companyId: true } });
+      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+      const hasAccess = isAdmin || isTechnician || memberships.some((m: any) => m.companyId === id);
+      if (!hasAccess) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }
@@ -214,7 +262,12 @@ export class CompaniesController {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
     try {
-      this.jwt.verify(token);
+      const payload: any = this.jwt.verify(token);
+      const userId: string | null = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
+      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
+      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      if (!isAdmin) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }
@@ -255,7 +308,12 @@ export class CompaniesController {
     const token = getTokenFromHeader(authorization);
     if (!token) return { ok: false, error: 'Unauthorized' };
     try {
-      this.jwt.verify(token);
+      const payload: any = this.jwt.verify(token);
+      const userId: string | null = payload?.sub ?? null;
+      if (!userId) return { ok: false, error: 'Invalid token' };
+      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
+      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      if (!isAdmin) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
     }

@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiGet } from '@/lib/api';
-import { getToken } from '@/lib/auth';
+import Link from 'next/link';
+import { apiGet, apiPost } from '@/lib/api';
+import { getToken, getUser } from '@/lib/auth';
 
 type Company = {
   id: string;
@@ -99,8 +100,11 @@ export default function NovaMaturidadePage() {
   const [step, setStep] = useState<number>(1);
   const [activeGroup, setActiveGroup] = useState<string>('detectar');
   const [answers, setAnswers] = useState<Record<string, 0 | 1 | 2>>({});
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTech, setIsTech] = useState(false);
 
   useEffect(() => {
+    computePermissions();
     const load = async () => {
       setLoading(true);
       setError('');
@@ -127,6 +131,21 @@ export default function NovaMaturidadePage() {
     };
     load();
   }, []);
+
+  async function computePermissions() {
+    const token = getToken();
+    const user = getUser();
+    if (!token || !user?.id) return;
+    try {
+      const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
+      const memberships = (res?.data?.memberships || []) as { role: string }[];
+      setIsAdmin(memberships.some((m) => m.role === 'ADMIN'));
+      setIsTech(memberships.some((m) => m.role === 'TECHNICIAN'));
+    } catch {
+      setIsAdmin(false);
+      setIsTech(false);
+    }
+  }
 
   const nextStep = () => setStep((s) => Math.min(3, s + 1));
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
@@ -179,14 +198,36 @@ export default function NovaMaturidadePage() {
       totalScore,
       maxScore: totalMax,
     };
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const list = raw ? JSON.parse(raw) : [];
-      const next = Array.isArray(list) ? [...list, entry] : [entry];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      router.push(`/seguranca/maturidade/${entry.id}`);
-    } catch (e) {}
+    (async () => {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/maturity`, token, entry);
+        if (res?.ok && res.data?.id) {
+          router.push(`/seguranca/maturidade/${res.data.id}`);
+          return;
+        }
+      } catch {}
+      // Fallback para compatibilidade local
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        const next = Array.isArray(list) ? [...list, entry] : [entry];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        router.push(`/seguranca/maturidade/${entry.id}`);
+      } catch {}
+    })();
   };
+
+  if (!(isAdmin || isTech)) {
+    return (
+      <div className="p-4 space-y-4">
+        <h1 className="text-xl font-semibold">Novo teste de maturidade</h1>
+        <div className="text-red-700">Acesso negado. Apenas administradores ou técnicos podem criar testes.</div>
+        <Link href="/seguranca/maturidade" className="px-3 py-2 rounded border">Voltar</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-6">

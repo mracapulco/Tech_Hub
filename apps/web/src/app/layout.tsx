@@ -8,7 +8,7 @@ export const metadata = {
   title: 'Tech Hub',
   description: 'Plataforma técnica multi-empresa',
   icons: {
-    icon: '/favicon.svg',
+    icon: '/favicon.ico',
   },
 };
 

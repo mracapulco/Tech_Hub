@@ -4,6 +4,25 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.2.1] — 2025-11-01
+
+### Adicionado
+- Listagem de usuários: zebra striping nas linhas para leitura facilitada.
+- Listagem de usuários: estado vazio com card informativo e CTAs ("Novo Cliente" e "Novo Administrador/Técnico").
+- Cabeçalho da seção "Usuários cadastrados" com descrição contextual.
+
+### Alterado
+- Padronização visual das telas de usuários (criação/listagem e detalhe/edição): containers, inputs, selects, botões e mensagens conforme estilo base.
+- Botões e ações com estilos consistentes conforme tema Tailwind.
+- Metadados do app ajustados para usar `favicon.ico` no `layout.tsx`.
+
+### Corrigido
+- Favicon não atualizava devido à referência anterior para `/favicon.svg`.
+
+### Observações
+- Versões atualizadas: root e web `0.2.1`.
+- Caso a mudança do favicon não apareça, fazer hard refresh ou abrir em aba anônima.
+
 ## [0.2.0] — 2025-10-31
 
 ### Adicionado

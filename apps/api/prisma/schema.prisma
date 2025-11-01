@@ -45,6 +45,7 @@ model Company {
   updatedAt DateTime @updatedAt
 
   memberships UserCompanyMembership[]
+  maturityAssessments MaturityAssessment[]
 }
 
 model UserCompanyMembership {
@@ -57,4 +58,17 @@ model UserCompanyMembership {
   createdAt DateTime @default(now())
 
   @@unique([userId, companyId])
+}
+
+// Registro de testes de maturidade de segurança
+model MaturityAssessment {
+  id         String   @id @default(uuid())
+  date       String
+  company    Company  @relation(fields: [companyId], references: [id])
+  companyId  String
+  answers    Json?
+  groupScores Json?
+  totalScore Int?
+  maxScore   Int?
+  createdAt  DateTime @default(now())
 }

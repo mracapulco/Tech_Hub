@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPut, apiUpload } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, getUser } from "@/lib/auth";
 
 function imgUrl(u?: string | null) {
   if (!u) return "";
@@ -40,6 +40,9 @@ export default function EmpresaEditarPage() {
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTech, setIsTech] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
   const [form, setForm] = useState({
     cnpj: "",
     name: "",
@@ -81,8 +84,31 @@ export default function EmpresaEditarPage() {
   }
 
   useEffect(() => {
-    if (id) fetchCompany();
+    if (id) {
+      fetchCompany();
+      computePermissions();
+    }
   }, [id]);
+
+  async function computePermissions() {
+    const token = getToken();
+    const user = getUser();
+    if (!token || !user?.id) return;
+    try {
+      const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
+      const memberships = (res?.data?.memberships || []) as { role: string; companyId: string }[];
+      const admin = memberships.some((m) => m.role === 'ADMIN');
+      const tech = memberships.some((m) => m.role === 'TECHNICIAN');
+      const hasCompany = memberships.some((m) => m.companyId === id);
+      setIsAdmin(admin);
+      setIsTech(tech);
+      setCanEdit(admin || tech || hasCompany);
+    } catch {
+      setIsAdmin(false);
+      setIsTech(false);
+      setCanEdit(false);
+    }
+  }
 
   async function handleLookup() {
     setMsg(null);
@@ -173,6 +199,13 @@ export default function EmpresaEditarPage() {
         <button onClick={() => router.back()} className="rounded bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300">Voltar</button>
       </div>
 
+      {!canEdit && (
+        <div className="mt-6 max-w-2xl p-4 bg-yellow-50 border border-yellow-200 rounded">
+          <p className="text-yellow-700">Você não tem permissão para editar esta empresa.</p>
+        </div>
+      )}
+
+      {canEdit && (
       <form onSubmit={handleSubmit} className="mt-6 space-y-4 max-w-2xl p-4 bg-white rounded shadow">
         {msg && (
           <div className={msg.type === 'error' ? 'text-red-600' : 'text-green-600'}>{msg.text}</div>
@@ -294,6 +327,7 @@ export default function EmpresaEditarPage() {
           </button>
         </div>
       </form>
+      )}
     </main>
   );
 }

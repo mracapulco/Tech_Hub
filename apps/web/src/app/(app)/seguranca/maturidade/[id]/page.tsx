@@ -2,6 +2,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { apiGet, apiDelete } from '@/lib/api';
+import { getToken, getUser } from '@/lib/auth';
 
 type Assessment = {
   id: string;
@@ -163,6 +165,8 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
   const router = useRouter();
   const { id } = params;
   const [item, setItem] = useState<Assessment | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTech, setIsTech] = useState(false);
   const groupSummaries = useMemo(() => {
     const ans = item?.answers || {};
     return GROUPS.map((g) => {
@@ -173,24 +177,65 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
   }, [item]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const list: Assessment[] = raw ? JSON.parse(raw) : [];
-      const found = (Array.isArray(list) ? list : []).find((x) => x.id === id) ?? null;
-      setItem(found);
-    } catch (e) {
-      setItem(null);
-    }
+    const token = getToken();
+    if (!token) return;
+    (async () => {
+      try {
+        const res = await apiGet<{ ok: boolean; data?: Assessment }>(`/maturity/${id}`, token);
+        if (res?.ok && res.data) {
+          setItem(res.data);
+          return;
+        }
+      } catch {}
+      // Fallback ao localStorage para compatibilidade
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const list: Assessment[] = raw ? JSON.parse(raw) : [];
+        const found = (Array.isArray(list) ? list : []).find((x) => x.id === id) ?? null;
+        setItem(found);
+      } catch (e) {
+        setItem(null);
+      }
+    })();
   }, [id]);
 
-  const onDelete = () => {
+  useEffect(() => {
+    const token = getToken();
+    const user = getUser();
+    if (!token || !user?.id) return;
+    (async () => {
+      try {
+        const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
+        const memberships = (res?.data?.memberships || []) as { role: string }[];
+        setIsAdmin(memberships.some((m) => m.role === 'ADMIN'));
+        setIsTech(memberships.some((m) => m.role === 'TECHNICIAN'));
+      } catch {
+        setIsAdmin(false);
+        setIsTech(false);
+      }
+    })();
+  }, []);
+
+  const onDelete = async () => {
+    const token = getToken();
+    if (!token) return;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const list: Assessment[] = raw ? JSON.parse(raw) : [];
-      const next = (Array.isArray(list) ? list : []).filter((x) => x.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      router.push('/seguranca/maturidade');
-    } catch (e) {}
+      const res = await apiDelete<{ ok: boolean; error?: string }>(`/maturity/${id}`, token);
+      if (res?.ok) {
+        // limpeza local para compatibilidade
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const list: Assessment[] = raw ? JSON.parse(raw) : [];
+          const next = (Array.isArray(list) ? list : []).filter((x) => x.id !== id);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        } catch {}
+        router.push('/seguranca/maturidade');
+      } else {
+        alert(res?.error || 'Falha ao excluir.');
+      }
+    } catch {
+      alert('Falha ao comunicar com a API.');
+    }
   };
 
   if (!item) {
@@ -208,7 +253,9 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
         <h1 className="text-xl font-semibold">Visualizar teste de maturidade</h1>
         <div className="flex gap-2">
           <Link href="/seguranca/maturidade" className="px-3 py-2 rounded border">Voltar</Link>
-          <button onClick={onDelete} className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">Excluir</button>
+          {(isAdmin || isTech) && (
+            <button onClick={onDelete} className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">Excluir</button>
+          )}
         </div>
       </div>
 

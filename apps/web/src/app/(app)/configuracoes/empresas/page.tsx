@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, getUser } from "@/lib/auth";
 
 function imgUrl(u?: string | null) {
   if (!u) return "";
@@ -37,6 +37,7 @@ export default function EmpresasPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [listMsg, setListMsg] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   async function handleLookup() {
     setMsg(null);
@@ -119,12 +120,27 @@ export default function EmpresasPage() {
     setCompanies(res.data || []);
   }
 
+  async function fetchIsAdmin() {
+    const token = getToken();
+    const user = getUser();
+    if (!token || !user?.id) return;
+    try {
+      const res = await apiGet<{ ok: boolean; data?: any; error?: string }>(`/users/${user.id}`, token);
+      const memberships = (res?.data?.memberships || []) as { role: string }[];
+      setIsAdmin(memberships.some((m) => m.role === 'ADMIN'));
+    } catch {
+      // Se falhar, mantém não-admin por segurança
+      setIsAdmin(false);
+    }
+  }
+
   // Carrega lista ao abrir a página
   // e mantém o formulário fechado até clicar em "Nova Empresa"
   // para priorizar visualização das empresas
   // (layout protegido já garante autenticação)
   useEffect(() => {
     fetchCompanies();
+    fetchIsAdmin();
   }, []);
 
   return (
@@ -134,20 +150,22 @@ export default function EmpresasPage() {
           <h1 className="text-2xl font-bold">Empresas</h1>
           <p className="mt-2 text-gray-600">Visualize e cadastre empresas com busca automática por CNPJ.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setMsg(null);
-            setForm({ cnpj: "", name: "", fantasyName: "", address: "", city: "", state: "", zipcode: "", phone: "", logoUrl: "" });
-            setShowForm(true);
-          }}
-          className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-        >
-          Nova Empresa
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => {
+              setMsg(null);
+              setForm({ cnpj: "", name: "", fantasyName: "", address: "", city: "", state: "", zipcode: "", phone: "", logoUrl: "" });
+              setShowForm(true);
+            }}
+            className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+          >
+            Nova Empresa
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {isAdmin && showForm && (
         <form onSubmit={handleSubmit} className="mt-6 space-y-4 max-w-2xl p-4 bg-white rounded shadow">
           {msg && (
             <div className={msg.type === "error" ? "text-red-600" : "text-green-600"}>{msg.text}</div>
