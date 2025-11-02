@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clearAuth, getUser } from '@/lib/auth';
+import Image from 'next/image';
 
 export default function Sidebar() {
   const router = useRouter();
@@ -44,7 +45,14 @@ export default function Sidebar() {
               <path d="M4 7h16M4 12h16M4 17h16" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          {!collapsed && <h2 className="text-lg font-bold">Tech Hub</h2>}
+          {collapsed ? (
+            <Image src="/logo.svg" alt="Tech Hub" width={24} height={24} priority />
+          ) : (
+            <div className="flex items-center gap-2">
+              <Image src="/logo.svg" alt="Tech Hub" width={28} height={28} priority />
+              <h2 className="text-lg font-bold">Tech Hub</h2>
+            </div>
+          )}
         </div>
       </div>
 
