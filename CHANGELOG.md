@@ -4,6 +4,18 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.1] — 2025-11-02
+
+### Alterado
+- Sidebar: logo `logo_white.svg` ajustada para largura 88px e altura proporcional 62px (viewBox 29700x21000).
+- Sidebar: reduzido espaçamento vertical do cabeçalho (`py-0`) e do menu (`pt-0` no primeiro item), eliminando o vão sob a logo.
+- Sidebar: centralização correta do cabeçalho e do ícone no modo recolhido; altura fixa `h-16` para manter mesma posição vertical dos ícones entre estados.
+- Sidebar: ajustes de padding finos (`p-1` no botão do menu; links com `pt-0 pb-2`).
+
+### Observações
+- Versões atualizadas: root e web `0.3.1`.
+- Erros `net::ERR_ABORTED` em rotas do Next.js durante transições/prefetch são esperados e não afetam a funcionalidade.
+
 ## [0.3.0] — 2025-11-01
 
 ### Adicionado

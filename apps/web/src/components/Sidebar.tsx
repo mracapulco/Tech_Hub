@@ -33,11 +33,11 @@ export default function Sidebar() {
 
   return (
     <div className={`flex flex-col ${collapsed ? 'w-16' : 'w-64'} h-screen bg-sidebar text-white border-r border-border transition-all duration-200`}>
-      <div className="p-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className={`flex items-center h-16 py-0 ${collapsed ? 'px-1 justify-center' : 'px-3 justify-between'}`}>
+        <div className={`flex items-center ${collapsed ? 'justify-center w-full' : 'gap-2'}`}>
           <button
             onClick={toggleCollapsed}
-            className="rounded p-2 hover:bg-sidebarHover"
+            className={`rounded p-1 hover:bg-sidebarHover ${collapsed ? 'mx-auto' : ''}`}
             aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >
@@ -45,23 +45,18 @@ export default function Sidebar() {
               <path d="M4 7h16M4 12h16M4 17h16" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          {collapsed ? (
-            <Image src="/logo.svg" alt="Tech Hub" width={24} height={24} priority />
-          ) : (
-            <div className="flex items-center gap-2">
-              <Image src="/logo.svg" alt="Tech Hub" width={28} height={28} priority />
-              <h2 className="text-lg font-bold">Tech Hub</h2>
-            </div>
+          {!collapsed && (
+            <Image src="/logo_white.svg" alt="Tech Hub" width={88} height={62} priority />
           )}
         </div>
       </div>
 
       
 
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-2 pt-0 pb-2 space-y-1 overflow-y-auto">
         <Link
           href="/dashboard"
-          className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 py-2 rounded hover:bg-sidebarHover`}
+          className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 pt-0 pb-2 rounded hover:bg-sidebarHover`}
           title="Dashboard"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">

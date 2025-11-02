@@ -50,8 +50,8 @@ export default function LoginPage() {
             <div className="mb-8">
               <Image src="/logo.svg" alt="Tech Hub" width={150} height={40} />
             </div>
-            <h1 className="text-2xl font-semibold">Welcome to Tech Hub</h1>
-            <p className="mt-1 text-sm font-medium text-gray-600">Sign into your account</p>
+            <h1 className="text-2xl font-semibold">Acesso ao sistema</h1>
+      <p className="mt-1 text-sm font-medium text-gray-600">Entre com as suas credenciais</p>
 
             <form onSubmit={onSubmit} className="mt-6">
               <div>
@@ -61,7 +61,7 @@ export default function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary"
-                  placeholder="Phone or Email address"
+          placeholder="Usuário"
                   required
                 />
               </div>
@@ -74,7 +74,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-lg border border-border bg-card px-3 py-2 pr-10 text-sm text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary"
-                    placeholder="Password"
+          placeholder="Senha"
                     required
                   />
                   <button
@@ -127,14 +127,18 @@ export default function LoginPage() {
               )}
 
               <div className="mt-3 text-center">
-                <a href="#" className="text-sm font-medium text-gray-600 hover:text-primary">Forgot password?</a>
+          <a href="#" className="text-sm font-medium text-gray-600 hover:text-primary">Esqueceu a senha?</a>
               </div>
             </form>
           </section>
 
           {/* Lateral direita com ilustração */}
-          <section className="relative hidden lg:block">
-            <Image src="/login-illustration.svg" alt="Ilustração tecnológica" fill priority className="object-cover" />
+          <section className="relative hidden lg:flex items-center justify-center p-8">
+            <img
+              src="/login-illustration-hub.svg"
+              alt="Ilustração hub conectada"
+              className="w-full h-auto max-h-full max-w-full object-contain"
+            />
           </section>
         </div>
       </div>
