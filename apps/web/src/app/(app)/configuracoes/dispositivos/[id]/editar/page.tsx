@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPut } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
+import { load } from "js-yaml";
 
 type DeviceType = { id: string; name: string; description?: string | null; status: string };
 type Brand = { id: string; name: string; status: string };
@@ -132,6 +133,88 @@ export default function EditDevicePage() {
     setModel(v);
   }
 
+  async function handleYamlImport(file: File) {
+    try {
+      const text = await file.text();
+      const data = load(text) as any;
+      if (!data || typeof data !== "object") {
+        setError("YAML inválido ou vazio.");
+        return;
+      }
+
+      // Mapear nome do tipo e da marca
+      const dtName = String(
+        (data?.device_type?.name) ?? data?.device_type ?? data?.type ?? data?.deviceType ?? ""
+      ).trim();
+      const mfName = String(
+        (data?.manufacturer?.name) ?? data?.manufacturer ?? data?.brand ?? data?.vendor ?? ""
+      ).trim();
+
+      const dtMatch = deviceTypes.find((t) => t.name?.toLowerCase() === dtName.toLowerCase());
+      if (dtMatch) {
+        setDeviceTypeId(dtMatch.id);
+        // Carregar marcas filtradas e selecionar a correspondente
+        if (mfName) {
+          const token = getToken();
+          if (token) {
+            try {
+              const res = await apiGet<{ ok: boolean; data?: Brand[] }>(`/brands?deviceTypeId=${dtMatch.id}`, token);
+              const bs = res?.data || [];
+              setBrands(bs);
+              const bMatch = bs.find((b) => b.name?.toLowerCase() === mfName.toLowerCase());
+              if (bMatch) setBrandId(bMatch.id);
+            } catch {}
+          }
+        }
+      }
+
+      // Campos simples
+      setModel(String(data?.model ?? data?.device?.model ?? ""));
+      const uh = (data?.u_height ?? data?.uHeight);
+      setUHeight(uh != null ? String(uh) : "");
+      setIsFullDepth(Boolean(data?.is_full_depth ?? data?.isFullDepth ?? isFullDepth));
+      setFrontImage(Boolean(data?.front_image ?? data?.frontImage ?? false));
+      setRearImage(Boolean(data?.rear_image ?? data?.rearImage ?? false));
+      const wt = (data?.weight ?? null);
+      setWeight(wt != null ? String(wt) : "");
+      setWeightUnit(String(data?.weight_unit ?? data?.weightUnit ?? weightUnit));
+      setAirflow(String(data?.airflow ?? airflow));
+
+      const toArr = (v: any) => (Array.isArray(v) ? v : v ? [v] : []);
+
+      // Console ports
+      const yamlConsolePorts = toArr(data?.["console-ports"] ?? data?.console_ports);
+      const cps = yamlConsolePorts.map((p: any) => ({
+        name: String(p?.name ?? p?.label ?? ""),
+        type: String(p?.type ?? p?.port_type ?? "other"),
+      }));
+      setConsolePorts(cps);
+
+      // Interfaces
+      const yamlIfaces = toArr(data?.interfaces);
+      const ifs = yamlIfaces.map((i: any) => ({
+        name: String(i?.name ?? i?.label ?? ""),
+        type: String(i?.type ?? "other"),
+        mgmt_only: Boolean(i?.mgmt_only),
+      }));
+      setInterfaces(ifs);
+
+      // Module bays
+      const yamlModuleBays = toArr(data?.["module-bays"] ?? data?.module_bays);
+      const mbs = yamlModuleBays.map((m: any) => ({
+        name: String(m?.name ?? ""),
+        label: m?.label ? String(m?.label) : undefined,
+        position: m?.position ? String(m?.position) : undefined,
+      }));
+      setModuleBays(mbs);
+
+      setMsg("Dados importados do YAML.");
+      setError(null);
+    } catch (e: any) {
+      setError(`Falha ao importar YAML: ${e?.message || "erro"}`);
+    }
+  }
+
   async function handleSave() {
     setError(null);
     setMsg(null);
@@ -194,10 +277,10 @@ export default function EditDevicePage() {
         <div className="bg-card border border-border rounded p-4 text-sm">Acesso restrito. Somente Admin pode editar dispositivos.</div>
       ) : loadingDevice ? (
         <div className="text-sm text-muted">Carregando dispositivo…</div>
-      ) : (
-        <div className="bg-card border border-border rounded p-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
+          ) : (
+            <div className="bg-card border border-border rounded p-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
               <label className="block text-xs text-muted mb-1">Tipo de dispositivo</label>
               <select value={deviceTypeId} onChange={(e) => setDeviceTypeId(e.target.value)} className="w-full border border-border rounded px-2 py-2">
                 <option value="">Selecione…</option>
@@ -206,7 +289,22 @@ export default function EditDevicePage() {
                 ))}
               </select>
               {loadingTypes ? <div className="text-xs text-muted mt-1">Carregando tipos…</div> : null}
-            </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs text-muted mb-1">Importar YAML (NetBox)</label>
+                  <input
+                    type="file"
+                    accept=".yml,.yaml"
+                    className="w-full text-xs border border-border rounded px-2 py-1"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleYamlImport(f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  <div className="text-xs text-muted mt-1">Selecione um arquivo YAML exportado do NetBox para preencher os campos automaticamente.</div>
+                </div>
             <div>
               <label className="block text-xs text-muted mb-1">Marca (filtrada pelo Tipo)</label>
               <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="w-full border border-border rounded px-2 py-2" disabled={!deviceTypeId}>

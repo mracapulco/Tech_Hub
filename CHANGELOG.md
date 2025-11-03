@@ -4,6 +4,20 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.3] — 2025-11-03
+
+### Adicionado
+- Web (Dispositivos): reintrodução da importação via YAML nas páginas de criação e edição, utilizando `js-yaml` para preencher automaticamente Tipo, Marca, campos básicos e arrays (`console-ports`, `interfaces`, `module-bays`).
+
+### Alterado
+- Web: inclusão de `@types/js-yaml` nas devDependencies para tipagem adequada e compatibilidade com o build de produção.
+
+### Operacional
+- Rebuild e subida do `web` em produção; validação da UI nas páginas com a seção “Importar YAML (NetBox)”.
+
+### Observações
+- Compatível com exportações do NetBox; o mapeamento depende das chaves presentes no arquivo.
+
 ## [0.3.2] — 2025-11-03
 
 ### Alterado
