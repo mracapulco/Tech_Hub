@@ -4,6 +4,22 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.2] — 2025-11-03
+
+### Alterado
+- Web (Dispositivos): remoção completa da funcionalidade de importação YAML nas páginas de edição e criação para compatibilidade com build de produção.
+- Web: migração para execução em produção (`web`) e descontinuação do ambiente de desenvolvimento (`web-dev`).
+
+### Corrigido
+- Build de produção do `web`: erros TypeScript relacionados a `js-yaml` (declarações ausentes e referência a `yaml.load`).
+
+### Operacional
+- Containers: parada e remoção de `web-dev`; rebuild e subida do `web` em produção.
+- Validação: revisão visual de `http://localhost:3000/configuracoes/dispositivos` sem erros.
+
+### Observações
+- A API continua disponível em `http://localhost:4000`.
+
 ## [0.3.1] — 2025-11-02
 
 ### Alterado

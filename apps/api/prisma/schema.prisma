@@ -72,3 +72,66 @@ model MaturityAssessment {
   maxScore   Int?
   createdAt  DateTime @default(now())
 }
+
+// Catálogo global de tipos de dispositivo (ex.: Nobreak, Servidor, Rack, Switch)
+model DeviceType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brands      BrandDeviceType[]
+  devices     Device[]
+}
+
+// Catálogo global de marcas (ex.: APC, Dell, HP)
+model Brand {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  logoUrl     String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deviceTypes BrandDeviceType[]
+  devices     Device[]
+}
+
+// Relação N:N entre Marcas e Tipos de Dispositivo
+model BrandDeviceType {
+  id            String     @id @default(uuid())
+  brand         Brand      @relation(fields: [brandId], references: [id])
+  brandId       String
+  deviceType    DeviceType @relation(fields: [deviceTypeId], references: [id])
+  deviceTypeId  String
+  createdAt     DateTime   @default(now())
+
+  @@unique([brandId, deviceTypeId])
+}
+
+// Inventário de dispositivos
+model Device {
+  id           String     @id @default(uuid())
+  deviceType   DeviceType @relation(fields: [deviceTypeId], references: [id])
+  deviceTypeId String
+  brand        Brand      @relation(fields: [brandId], references: [id])
+  brandId      String
+  model        String
+  slug         String?
+  uHeight      Int?
+  isFullDepth  Boolean    @default(false)
+  frontImage   Boolean    @default(false)
+  rearImage    Boolean    @default(false)
+  weight       Float?
+  weightUnit   String?    @default("kg")
+  airflow      String?
+  consolePorts Json?
+  interfaces   Json?
+  moduleBays   Json?
+  status       String     @default("ACTIVE")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}

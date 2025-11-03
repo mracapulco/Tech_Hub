@@ -8,6 +8,9 @@ import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { MaturityModule } from './maturity/maturity.module';
+import { DeviceTypesModule } from './device-types/device-types.module';
+import { BrandsModule } from './brands/brands.module';
+import { DevicesModule } from './devices/devices.module';
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { MaturityModule } from './maturity/maturity.module';
     CompaniesModule,
     UploadsModule,
     MaturityModule,
+    DeviceTypesModule,
+    BrandsModule,
+    DevicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
