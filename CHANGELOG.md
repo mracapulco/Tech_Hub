@@ -4,6 +4,22 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.4] — 2025-11-04
+
+### Adicionado
+- Web (Maturidade • Análise por IA): página dedicada de análise estruturada por domínios (Identify, Protect, Detect, Respond, Recover, Governance), exibindo estado atual, lacunas e roadmap por ações.
+- Web (Análise por IA): botão "Voltar" com retorno à página anterior; bloco introdutório sobre processamento interno e confidencialidade; aviso de que a análise deve ser validada pelo time de segurança.
+- Web (Exportação): opções CSV e PDF na análise por IA, com cabeçalho personalizado no PDF (logo do cliente e "Powered by Tech Hub"); resumo do roadmap com total de ações, somatório de esforço e prazo total.
+
+### Corrigido
+- Web (Autorização): detecção de papéis (admin/técnico) usando `memberships` via API de usuário, evitando erro de tipo em `AuthUser` e garantindo consistência com páginas originais.
+
+### Operacional
+- Containers: rebuild e subida de `web` e `api`; validação visual das mudanças na página de análise por domínios.
+
+### Observações
+- Versões atualizadas: root e web `0.3.4`; API permanece `0.2.0`.
+
 ## [0.3.3] — 2025-11-03
 
 ### Adicionado
