@@ -71,6 +71,9 @@ model MaturityAssessment {
   totalScore Int?
   maxScore   Int?
   createdAt  DateTime @default(now())
+
+  // Relação 1:1 com análise por IA (quando existir)
+  analysis   MaturityAnalysis?
 }
 
 // Catálogo global de tipos de dispositivo (ex.: Nobreak, Servidor, Rack, Switch)
@@ -134,4 +137,26 @@ model Device {
   status       String     @default("ACTIVE")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+}
+
+// Configurações globais (ex.: chaves de integração) com valor criptografado
+model Setting {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  valueEnc   String
+  updatedBy  String?
+  updatedAt  DateTime @default(now()) @updatedAt
+}
+
+// Resultado de análise por IA atrelado a um teste de maturidade
+model MaturityAnalysis {
+  id            String             @id @default(uuid())
+  assessment    MaturityAssessment @relation(fields: [assessmentId], references: [id])
+  assessmentId  String             @unique
+  content       Json
+  provider      String?
+  model         String?
+  createdById   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 }

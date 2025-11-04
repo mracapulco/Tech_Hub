@@ -11,6 +11,7 @@ import { MaturityModule } from './maturity/maturity.module';
 import { DeviceTypesModule } from './device-types/device-types.module';
 import { BrandsModule } from './brands/brands.module';
 import { DevicesModule } from './devices/devices.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { DevicesModule } from './devices/devices.module';
     DeviceTypesModule,
     BrandsModule,
     DevicesModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -23,6 +23,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://techhub:techhub_password@db:5432/techhub
       JWT_SECRET: dev_secret_change_me
+      CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY}
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -47,28 +48,9 @@ services:
     networks:
       - techhub-net
 
-  web-dev:
-    image: node:20-alpine
-    container_name: techhub-web-dev
-    working_dir: /app
-    environment:
-      NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-    command: sh -c "npm install --legacy-peer-deps && npm run dev"
-    volumes:
-      - ./apps/web:/app
-      - web_node_modules:/app/node_modules
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api
-    networks:
-      - techhub-net
-
 networks:
   techhub-net:
     driver: bridge
 
 volumes:
   db_data:
-  web_node_modules:

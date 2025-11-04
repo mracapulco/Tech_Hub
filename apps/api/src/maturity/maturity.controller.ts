@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Headers, Param, Post, Delete } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Delete, Put } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { MaturityAiService } from './maturity.ai.service';
 
 type CreateAssessmentDto = {
   id?: string;
@@ -14,7 +15,11 @@ type CreateAssessmentDto = {
 
 @Controller('maturity')
 export class MaturityController {
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly ai: MaturityAiService,
+  ) {}
 
   private getUserIdFromAuthHeader(authorization?: string): string | null {
     if (!authorization) return null;
@@ -49,11 +54,11 @@ export class MaturityController {
 
     let records: any[] = [];
     if (isAdmin || isTech) {
-      records = await this.prisma.maturityAssessment.findMany({ include: { company: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
+      records = await this.prisma.maturityAssessment.findMany({ include: { company: true, analysis: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
     } else {
       const companyIds = (memberships || []).map((m: any) => m.companyId);
       if (companyIds.length === 0) return { ok: true, data: [] };
-      records = await this.prisma.maturityAssessment.findMany({ where: { companyId: { in: companyIds } }, include: { company: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
+      records = await this.prisma.maturityAssessment.findMany({ where: { companyId: { in: companyIds } }, include: { company: true, analysis: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
     }
 
     const data = records.map((r: any) => ({
@@ -66,6 +71,7 @@ export class MaturityController {
       groupScores: r.groupScores ?? undefined,
       totalScore: r.totalScore ?? undefined,
       maxScore: r.maxScore ?? undefined,
+      hasAnalysis: !!(r as any).analysis,
     }));
     return { ok: true, data };
   }
@@ -76,7 +82,7 @@ export class MaturityController {
     if (!userId) return { ok: false, error: 'Unauthorized' };
     const { isAdmin, isTech, memberships } = await this.getRoles(userId);
 
-    const record = await this.prisma.maturityAssessment.findUnique({ where: { id }, include: { company: true } });
+    const record = await this.prisma.maturityAssessment.findUnique({ where: { id }, include: { company: true, analysis: true } });
     if (!record) return { ok: false, error: 'Registro não encontrado.' };
     if (!(isAdmin || isTech)) {
       const hasCompany = (memberships || []).some((m: any) => m.companyId === record.companyId);
@@ -92,6 +98,7 @@ export class MaturityController {
       groupScores: (record as any).groupScores ?? undefined,
       totalScore: (record as any).totalScore ?? undefined,
       maxScore: (record as any).maxScore ?? undefined,
+      hasAnalysis: !!(record as any).analysis,
     };
     return { ok: true, data };
   }
@@ -151,6 +158,108 @@ export class MaturityController {
       return { ok: true };
     } catch {
       return { ok: false, error: 'Registro não encontrado.' };
+    }
+  }
+
+  @Post('analysis')
+  async analyze(
+    @Body() body: any,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const userId = this.getUserIdFromAuthHeader(authorization);
+    if (!userId) return { ok: false, error: 'Unauthorized' };
+    const { isAdmin, isTech } = await this.getRoles(userId);
+    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+
+    const { assessmentId, answers, companyContext, targetFrameworks, language } = body || {};
+    let sourceAnswers = answers;
+    let ctx = companyContext || {};
+    if (assessmentId && !answers) {
+      const record = await this.prisma.maturityAssessment.findUnique({ where: { id: String(assessmentId) } });
+      if (!record) return { ok: false, error: 'Avaliação não encontrada.' };
+      sourceAnswers = record.answers || { groupScores: record.groupScores, totalScore: record.totalScore, maxScore: record.maxScore };
+      // Passar companyId para permitir carregamento de perfil do cliente
+      ctx = { ...(companyContext || {}), companyId: record.companyId };
+    }
+    try {
+      const result = await this.ai.analyze({
+        answers: sourceAnswers,
+        companyContext: ctx,
+        targetFrameworks,
+        language,
+      });
+      // Persistir análise atrelada à avaliação
+      if (assessmentId) {
+        await this.prisma.maturityAnalysis.upsert({
+          where: { assessmentId: String(assessmentId) },
+          update: { content: result, updatedAt: new Date(), createdById: userId },
+          create: { assessmentId: String(assessmentId), content: result, createdById: userId },
+        });
+      }
+      return { ok: true, data: result };
+    } catch (e: any) {
+      // Log detalhado para diagnóstico em ambiente local
+      console.error('AI analysis error:', e?.message || e, e?.stack || '');
+      const msg = e?.message?.includes('OPENAI_API_KEY') ? 'Configuração ausente: OPENAI_API_KEY.' : 'Falha na análise por IA.';
+      return { ok: false, error: msg };
+    }
+  }
+
+  // Obter análise salva (visível a clientes vinculados)
+  @Get(':id/analysis')
+  async getAnalysis(@Param('id') id: string, @Headers('authorization') authorization?: string) {
+    const userId = this.getUserIdFromAuthHeader(authorization);
+    if (!userId) return { ok: false, error: 'Unauthorized' };
+    const { isAdmin, isTech, memberships } = await this.getRoles(userId);
+
+    const record = await this.prisma.maturityAssessment.findUnique({ where: { id: String(id) } });
+    if (!record) return { ok: false, error: 'Registro não encontrado.' };
+    if (!(isAdmin || isTech)) {
+      const hasCompany = (memberships || []).some((m: any) => m.companyId === record.companyId);
+      if (!hasCompany) return { ok: false, error: 'Forbidden' };
+    }
+    const analysis = await this.prisma.maturityAnalysis.findUnique({ where: { assessmentId: String(id) } });
+    if (!analysis) return { ok: true, data: null };
+    return {
+      ok: true,
+      data: {
+        id: analysis.id,
+        content: analysis.content,
+        createdAt: (analysis as any).createdAt?.toISOString?.() ?? (analysis as any).createdAt,
+        updatedAt: (analysis as any).updatedAt?.toISOString?.() ?? (analysis as any).updatedAt,
+      },
+    };
+  }
+
+  // Atualizar análise manualmente (apenas admin/tech)
+  @Put(':id/analysis')
+  async updateAnalysis(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
+    const userId = this.getUserIdFromAuthHeader(authorization);
+    if (!userId) return { ok: false, error: 'Unauthorized' };
+    const { isAdmin, isTech } = await this.getRoles(userId);
+    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    const content = body?.content;
+    if (!content) return { ok: false, error: 'Conteúdo ausente.' };
+    const updated = await this.prisma.maturityAnalysis.upsert({
+      where: { assessmentId: String(id) },
+      update: { content, updatedAt: new Date(), createdById: userId },
+      create: { assessmentId: String(id), content, createdById: userId },
+    });
+    return { ok: true, data: { id: updated.id } };
+  }
+
+  // Excluir análise (apenas admin/tech)
+  @Delete(':id/analysis')
+  async deleteAnalysis(@Param('id') id: string, @Headers('authorization') authorization?: string) {
+    const userId = this.getUserIdFromAuthHeader(authorization);
+    if (!userId) return { ok: false, error: 'Unauthorized' };
+    const { isAdmin, isTech } = await this.getRoles(userId);
+    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    try {
+      await this.prisma.maturityAnalysis.delete({ where: { assessmentId: String(id) } });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Análise não encontrada.' };
     }
   }
 }

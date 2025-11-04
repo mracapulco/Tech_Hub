@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { apiGet, apiDelete } from '@/lib/api';
+import { apiGet, apiDelete, apiPost } from '@/lib/api';
 import { getToken, getUser } from '@/lib/auth';
 
 type Assessment = {
@@ -175,6 +175,24 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTech, setIsTech] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<any | null>(null);
+  async function deleteAnalysis() {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await apiDelete<{ ok: boolean; error?: string }>(`/maturity/${id}/analysis`, token);
+      if (res?.ok) {
+        setAiResult(null);
+        alert('Análise excluída.');
+      } else {
+        alert(res?.error || 'Falha ao excluir análise.');
+      }
+    } catch {
+      alert('Falha ao comunicar com a API.');
+    }
+  }
   const groupSummaries = useMemo(() => {
     const ans = item?.answers || {};
     return GROUPS.map((g) => {
@@ -192,6 +210,13 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
         const res = await apiGet<{ ok: boolean; data?: Assessment }>(`/maturity/${id}`, token);
         if (res?.ok && res.data) {
           setItem(res.data);
+          // Carregar análise salva (visível a clientes também)
+          try {
+            const ar = await apiGet<{ ok: boolean; data?: any }>(`/maturity/${id}/analysis`, token);
+            if (ar?.ok) {
+              setAiResult(ar.data?.content || null);
+            }
+          } catch {}
           return;
         }
       } catch {}
@@ -257,6 +282,37 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
     const needQuotes = /[",\n]/.test(val);
     const escaped = val.replace(/"/g, '""');
     return needQuotes ? `"${escaped}"` : escaped;
+  }
+
+  async function analyzeByAi() {
+    const token = getToken();
+    if (!token) {
+      alert('Sessão expirada. Faça login novamente.');
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/maturity/analysis`, token, { assessmentId: id });
+      if (res?.ok && res.data) {
+        setAiResult(res.data);
+      } else {
+        setAiError(res?.error || 'Falha na análise por IA.');
+      }
+    } catch (e) {
+      setAiError('Falha ao comunicar com a API.');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function formatPriority(p: any) {
+    const s = String(p || '').toLowerCase();
+    if (!s) return '';
+    if (s.includes('high') || s.includes('alta')) return 'Alta';
+    if (s.includes('medium') || s.includes('media') || s.includes('média')) return 'Média';
+    if (s.includes('low') || s.includes('baixa')) return 'Baixa';
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   function exportCSV() {
@@ -458,6 +514,11 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
             )}
           </div>
           {(isAdmin || isTech) && (
+            <button onClick={analyzeByAi} disabled={aiLoading} className={`px-3 py-2 rounded ${aiLoading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}>
+              {aiLoading ? 'Analisando…' : 'Analisar por IA'}
+            </button>
+          )}
+          {(isAdmin || isTech) && (
             <button onClick={onDelete} className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">Excluir</button>
           )}
         </div>
@@ -523,6 +584,19 @@ export default function ViewMaturidadePage({ params }: { params: { id: string } 
             const labels = groupSummaries.map((g) => g.name);
             return <RadarChart labels={labels} values={percents} size={360} />;
           })()}
+        </div>
+      </div>
+
+      {/* Análise por IA agora é exibida em página dedicada */}
+      <div className="space-y-3 border rounded p-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Análise por IA</h2>
+        </div>
+        <div className="text-sm text-gray-700">
+          A análise detalhada por domínio (Identificar, Proteger, Detectar, Responder, Recuperar e Governança) foi movida para uma página dedicada.
+        </div>
+        <div>
+          <Link href={`/seguranca/maturidade/${id}/analise`} className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 inline-block">Abrir análise em página separada</Link>
         </div>
       </div>
 

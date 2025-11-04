@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiGet, apiPut, apiUpload } from "@/lib/api";
+import { apiGet, apiPut, apiUpload, apiPost } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 
 function imgUrl(u?: string | null) {
@@ -55,6 +55,23 @@ export default function EmpresaEditarPage() {
     logoUrl: "",
   });
 
+  // Perfil de IA do Cliente (campos principais)
+  const [profileLoading, setProfileLoading] = useState<boolean>(false);
+  const [profileSaving, setProfileSaving] = useState<boolean>(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [clientProfile, setClientProfile] = useState<any>({
+    industry: "",
+    region: "",
+    preferredStack: {
+      monitoring: "",
+      antivirus: "",
+      backup: "",
+    },
+    goals: "",
+    limitations: "",
+    customSolutions: "",
+  });
+
   async function fetchCompany() {
     const token = getToken();
     if (!token) {
@@ -87,6 +104,7 @@ export default function EmpresaEditarPage() {
     if (id) {
       fetchCompany();
       computePermissions();
+      fetchClientProfile();
     }
   }, [id]);
 
@@ -107,6 +125,59 @@ export default function EmpresaEditarPage() {
       setIsAdmin(false);
       setIsTech(false);
       setCanEdit(false);
+    }
+  }
+
+  async function fetchClientProfile() {
+    const token = getToken();
+    if (!token || !id) return;
+    setProfileLoading(true);
+    setProfileMsg(null);
+    try {
+      const res = await apiGet<{ ok: boolean; data?: any; error?: string }>(`/admin/settings/client-profile/${id}`, token);
+      if (res?.ok && res.data) {
+        setClientProfile({
+          industry: res.data.industry || "",
+          region: res.data.region || "",
+          preferredStack: {
+            monitoring: res.data.preferredStack?.monitoring || "",
+            antivirus: res.data.preferredStack?.antivirus || "",
+            backup: res.data.preferredStack?.backup || "",
+          },
+          goals: res.data.goals || "",
+          limitations: res.data.limitations || "",
+          customSolutions: res.data.customSolutions || "",
+        });
+      } else if (res?.error) {
+        setProfileMsg({ type: 'error', text: res.error });
+      }
+    } catch {
+      setProfileMsg({ type: 'error', text: 'Falha ao carregar perfil do cliente.' });
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  async function saveClientProfile(e: React.FormEvent) {
+    e.preventDefault();
+    const token = getToken();
+    if (!token || !id) {
+      setProfileMsg({ type: 'error', text: 'Sessão expirada. Faça login novamente.' });
+      return;
+    }
+    setProfileSaving(true);
+    setProfileMsg(null);
+    try {
+      const res = await apiPost<{ ok: boolean; error?: string }>(`/admin/settings/client-profile/${id}`, token, { profile: clientProfile });
+      if (res?.ok) {
+        setProfileMsg({ type: 'success', text: 'Perfil de IA do cliente salvo com sucesso.' });
+      } else {
+        setProfileMsg({ type: 'error', text: res?.error || 'Falha ao salvar perfil do cliente.' });
+      }
+    } catch {
+      setProfileMsg({ type: 'error', text: 'Erro de rede ao salvar perfil do cliente.' });
+    } finally {
+      setProfileSaving(false);
     }
   }
 
@@ -327,6 +398,103 @@ export default function EmpresaEditarPage() {
           </button>
         </div>
       </form>
+      )}
+
+      {canEdit && (
+        <section id="perfil-ia" className="mt-8 max-w-2xl p-4 bg-white rounded shadow">
+          <h2 className="text-xl font-semibold">Perfil de IA do Cliente</h2>
+          <p className="mt-1 text-gray-600">Informações específicas desta empresa que a IA deve considerar.</p>
+          {profileMsg && (
+            <p className={profileMsg.type === 'error' ? 'mt-2 text-red-700' : 'mt-2 text-green-700'}>{profileMsg.text}</p>
+          )}
+
+          <form onSubmit={saveClientProfile} className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium">Setor/Indústria</label>
+                <input
+                  className="mt-1 w-full rounded border px-3 py-2"
+                  value={clientProfile.industry}
+                  onChange={(e) => setClientProfile({ ...clientProfile, industry: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Região</label>
+                <input
+                  className="mt-1 w-full rounded border px-3 py-2"
+                  value={clientProfile.region}
+                  onChange={(e) => setClientProfile({ ...clientProfile, region: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium">Stack - Monitoramento</label>
+                <input
+                  className="mt-1 w-full rounded border px-3 py-2"
+                  value={clientProfile.preferredStack?.monitoring || ''}
+                  onChange={(e) => setClientProfile({ ...clientProfile, preferredStack: { ...(clientProfile.preferredStack || {}), monitoring: e.target.value } })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Stack - Antivírus</label>
+                <input
+                  className="mt-1 w-full rounded border px-3 py-2"
+                  value={clientProfile.preferredStack?.antivirus || ''}
+                  onChange={(e) => setClientProfile({ ...clientProfile, preferredStack: { ...(clientProfile.preferredStack || {}), antivirus: e.target.value } })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Stack - Backup</label>
+                <input
+                  className="mt-1 w-full rounded border px-3 py-2"
+                  value={clientProfile.preferredStack?.backup || ''}
+                  onChange={(e) => setClientProfile({ ...clientProfile, preferredStack: { ...(clientProfile.preferredStack || {}), backup: e.target.value } })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Objetivos</label>
+              <textarea
+                className="mt-1 w-full rounded border px-3 py-2"
+                rows={3}
+                value={clientProfile.goals}
+                onChange={(e) => setClientProfile({ ...clientProfile, goals: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Limitações</label>
+              <textarea
+                className="mt-1 w-full rounded border px-3 py-2"
+                rows={3}
+                value={clientProfile.limitations}
+                onChange={(e) => setClientProfile({ ...clientProfile, limitations: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Soluções personalizadas</label>
+              <textarea
+                className="mt-1 w-full rounded border px-3 py-2"
+                rows={3}
+                value={clientProfile.customSolutions}
+                onChange={(e) => setClientProfile({ ...clientProfile, customSolutions: e.target.value })}
+              />
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button type="submit" disabled={profileSaving} className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-60">
+                {profileSaving ? 'Salvando...' : 'Salvar Perfil de IA'}
+              </button>
+              <button type="button" onClick={fetchClientProfile} disabled={profileLoading} className="rounded bg-gray-200 px-4 py-2 text-gray-800 disabled:opacity-60">
+                {profileLoading ? 'Carregando...' : 'Recarregar'}
+              </button>
+            </div>
+          </form>
+        </section>
       )}
     </main>
   );

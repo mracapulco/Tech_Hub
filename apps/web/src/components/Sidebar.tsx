@@ -2,13 +2,15 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { clearAuth, getUser } from '@/lib/auth';
+import { clearAuth, getUser, getToken } from '@/lib/auth';
+import { apiGet } from '@/lib/api';
 import Image from 'next/image';
 
 export default function Sidebar() {
   const router = useRouter();
   const user = typeof window !== 'undefined' ? getUser() : null;
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -16,6 +18,23 @@ export default function Sidebar() {
       if (stored) setCollapsed(stored === 'true');
     } catch (e) {}
   }, []);
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? getToken() : null;
+    if (!token || !user?.id) {
+      setIsAdmin(false);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
+        const memberships = (res?.data?.memberships || []) as { role: string }[];
+        setIsAdmin(memberships.some((m) => m.role === 'ADMIN'));
+      } catch {
+        setIsAdmin(false);
+      }
+    })();
+  }, [user?.id]);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -135,6 +154,14 @@ export default function Sidebar() {
                 </svg>
                 <span>Tipo de dispositivo</span>
               </Link>
+              {isAdmin && (
+                <Link href="/configuracoes/ia" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="IA">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                    <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <span>IA</span>
+                </Link>
+              )}
             </div>
           </details>
         ) : (
@@ -180,6 +207,14 @@ export default function Sidebar() {
                 </svg>
                 <span>Tipo de dispositivo</span>
               </Link>
+              {isAdmin && (
+                <Link href="/configuracoes/ia" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="IA">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                    <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <span>IA</span>
+                </Link>
+              )}
             </div>
           </div>
         )}

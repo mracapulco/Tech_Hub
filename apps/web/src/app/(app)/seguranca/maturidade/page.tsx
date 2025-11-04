@@ -13,6 +13,7 @@ type Assessment = {
   totalScore?: number;
   maxScore?: number;
   answers?: Record<string, 0 | 1 | 2>;
+  hasAnalysis?: boolean;
 };
 
 const STORAGE_KEY = 'cyber:maturity:list';
@@ -137,9 +138,16 @@ export default function MaturidadeListPage() {
                       <span className={`inline-block px-2 py-1 rounded ${levelClass}`}>{percent}% {level}</span>
                     </td>
                     <td className="px-3 py-2 border-b">
-                      <Link href={`/seguranca/maturidade/${item.id}`} className="px-3 py-1 rounded bg-gray-800 text-white hover:bg-black">
-                        Visualizar
-                      </Link>
+                      <div className="flex gap-2">
+                        <Link href={`/seguranca/maturidade/${item.id}`} className="px-3 py-1 rounded bg-gray-800 text-white hover:bg-black">
+                          Visualizar
+                        </Link>
+                        {item.hasAnalysis && (
+                          <Link href={`/seguranca/maturidade/${item.id}/analise`} className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">
+                            Análise
+                          </Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
