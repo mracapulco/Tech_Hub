@@ -25,6 +25,8 @@ services:
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY}
     depends_on:
       - db
+    volumes:
+      - uploads_data:/app/uploads
     ports:
       - "4000:3000"
     networks:
@@ -55,3 +57,4 @@ networks:
 
 volumes:
   db_data:
+  uploads_data:
