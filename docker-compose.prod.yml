@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: techhub-db
+    environment:
+      POSTGRES_USER: techhub
+      POSTGRES_PASSWORD: techhub_password
+      POSTGRES_DB: techhub
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - techhub-net
+    restart: always
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: techhub-api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://techhub:techhub_password@db:5432/techhub
+      JWT_SECRET: ${JWT_SECRET}
+      CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY}
+    depends_on:
+      - db
+    ports:
+      - "4000:3000"
+    networks:
+      - techhub-net
+    restart: always
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: techhub-web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    networks:
+      - techhub-net
+    restart: always
+
+networks:
+  techhub-net:
+    driver: bridge
+
+volumes:
+  db_data:

@@ -43,7 +43,11 @@ export default function PerfilPage() {
     const token = getToken();
     if (!token) return;
     try {
-      const body: any = { name, lastName, email };
+      // Monta o corpo apenas com campos válidos para evitar limpar dados com strings vazias
+      const body: any = {};
+      if (typeof name === 'string' && name.trim()) body.name = name.trim();
+      if (typeof lastName === 'string') body.lastName = lastName.trim();
+      if (typeof email === 'string' && email.trim()) body.email = email.trim();
       if (avatarUrl) body.avatarUrl = avatarUrl;
       if (password) body.password = password;
       const res = await apiPut<UpdateResponse>('/users/me', token, body);
@@ -55,7 +59,9 @@ export default function PerfilPage() {
         setMessage('Dados atualizados com sucesso!');
         setPassword('');
       } else {
-        setMessage('Falha ao atualizar dados');
+        const anyRes: any = res as any;
+        const detail = anyRes?.error || anyRes?.message;
+        setMessage(detail ? `Falha ao atualizar dados: ${detail}` : 'Falha ao atualizar dados');
       }
     } catch {
       setMessage('Erro ao atualizar');
@@ -103,13 +109,18 @@ export default function PerfilPage() {
                 return;
               }
               setUploadingAvatar(true);
-              const res = await apiUpload('/uploads', token, file);
-              setUploadingAvatar(false);
-              if (!res?.ok || !res.path) {
-                setMessage(res?.error || 'Falha ao enviar avatar.');
-                return;
+              try {
+                const res = await apiUpload('/uploads', token, file);
+                if (!res?.ok || !res.path) {
+                  setMessage(res?.error ? `Falha ao enviar avatar: ${res.error}` : 'Falha ao enviar avatar.');
+                  return;
+                }
+                setAvatarUrl(res.path!);
+              } catch (err: any) {
+                setMessage('Erro de rede ao enviar avatar. Verifique sua conexão.');
+              } finally {
+                setUploadingAvatar(false);
               }
-              setAvatarUrl(res.path!);
             }}
           />
           {uploadingAvatar && <p className="text-sm text-gray-500 mt-1">Enviando avatar...</p>}
