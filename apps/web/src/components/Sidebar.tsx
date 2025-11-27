@@ -51,20 +51,12 @@ export default function Sidebar() {
   };
 
   return (
-    <div className={`flex flex-col ${collapsed ? 'w-16' : 'w-64'} h-screen bg-sidebar text-white border-r border-border transition-all duration-200`}>
-      <div className={`flex items-center h-16 py-0 ${collapsed ? 'px-1 justify-center' : 'px-3 justify-between'}`}>
-        <div className={`flex items-center ${collapsed ? 'justify-center w-full' : 'gap-2'}`}>
-          <button
-            onClick={toggleCollapsed}
-            className={`rounded p-1 hover:bg-sidebarHover ${collapsed ? 'mx-auto' : ''}`}
-            aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
-            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6">
-              <path d="M4 7h16M4 12h16M4 17h16" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-          {!collapsed && (
+    <div className={`flex flex-col ${collapsed ? 'w-16' : 'w-56'} h-screen bg-sidebar text-white border-r border-border transition-all duration-200`}>
+      <div className={`flex items-center h-16 py-0 ${collapsed ? 'px-1 justify-center' : 'px-3 justify-center'}`}>
+        <div className={`flex items-center justify-center w-full`}>
+          {collapsed ? (
+            <Image src="/logo_white.svg" alt="Tech Hub" width={32} height={22} priority />
+          ) : (
             <Image src="/logo_white.svg" alt="Tech Hub" width={88} height={62} priority />
           )}
         </div>
@@ -84,14 +76,17 @@ export default function Sidebar() {
           {!collapsed && <span>Dashboard</span>}
         </Link>
 
-        {/* Segurança → Maturidade */}
+        {/* Segurança → Maturidade / Vulnerabilidades */}
         {!collapsed ? (
           <details>
-            <summary className="cursor-pointer flex items-center gap-3 px-2 py-2 rounded hover:bg-primary/10">
+            <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
                 <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
               </svg>
-              <span>Segurança</span>
+              <span className="ml-3">Segurança</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4 ml-auto">
+                <path d="M9 18l6-6-6-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </summary>
             <div className="mt-1 ml-6 space-y-1">
               <Link href="/seguranca/maturidade" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Maturidade">
@@ -100,28 +95,54 @@ export default function Sidebar() {
                 </svg>
                 <span>Maturidade</span>
               </Link>
+              <Link href="/seguranca/vulnerabilidades" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Vulnerabilidades">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
+                </svg>
+                <span>Vulnerabilidades</span>
+              </Link>
             </div>
           </details>
         ) : (
-          <Link
-            href="/seguranca/maturidade"
-            className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 py-2 rounded hover:bg-sidebarHover`}
-            title="Maturidade"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
-              <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
-            </svg>
-          </Link>
+          <div className="relative group">
+            <Link
+              href="/seguranca"
+              className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 py-2 rounded hover:bg-sidebarHover`}
+              title="Segurança"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
+                <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+            </Link>
+            <div className="absolute left-full top-0 ml-2 w-48 bg-card border border-border rounded shadow p-2 hidden group-hover:block z-50 text-text">
+              <div className="text-xs text-muted px-1 pb-1">Segurança</div>
+              <Link href="/seguranca/maturidade" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Maturidade">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
+                </svg>
+                <span>Maturidade</span>
+              </Link>
+              <Link href="/seguranca/vulnerabilidades" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Vulnerabilidades">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
+                </svg>
+                <span>Vulnerabilidades</span>
+              </Link>
+            </div>
+          </div>
         )}
 
         {/* Configurações — manter sempre abaixo dos outros itens */}
         {!collapsed ? (
           <details>
-            <summary className="cursor-pointer flex items-center gap-3 px-2 py-2 rounded hover:bg-sidebarHover">
+            <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-sidebarHover">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
                 <path d="M12 3l2 4 4 .5-3 3 .7 4.5-3.7-2-3.7 2 .7-4.5-3-3 4-.5 2-4z" strokeWidth="2" strokeLinejoin="round" />
               </svg>
-              <span>Configurações</span>
+              <span className="ml-3">Configurações</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4 ml-auto">
+                <path d="M9 18l6-6-6-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </summary>
             <div className="mt-1 ml-6 space-y-1">
               <Link href="/configuracoes/usuarios" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Usuários">
@@ -221,25 +242,16 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-2 mt-auto space-y-1">
-        <Link
-          href="/perfil"
-          className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 py-2 rounded hover:bg-sidebarHover`}
-          title="Perfil"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
-            <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
-          </svg>
-          {!collapsed && <span>Perfil</span>}
-        </Link>
         <button
-          onClick={onLogout}
+          onClick={toggleCollapsed}
           className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 py-2 rounded hover:bg-sidebarHover`}
-          title="Sair"
+          aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
-            <path d="M10 17l5-5-5-5M4 12h11" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 7h16M4 12h16M4 17h16" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          {!collapsed && <span>Sair</span>}
+          {!collapsed && <span>{collapsed ? 'Expandir' : 'Recolher'}</span>}
         </button>
       </div>
     </div>

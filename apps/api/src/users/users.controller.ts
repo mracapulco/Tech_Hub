@@ -226,17 +226,28 @@ export class UsersController {
     if (!userId) return { ok: false, message: 'Não autorizado' };
 
     const data: any = {};
-    if (body.name !== undefined) data.name = body.name;
-    if (body.lastName !== undefined) data.lastName = body.lastName;
-    if (body.email !== undefined) data.email = body.email;
+    if (body.name !== undefined) data.name = typeof body.name === 'string' ? body.name.trim() : body.name;
+    if (body.lastName !== undefined) data.lastName = typeof body.lastName === 'string' ? body.lastName.trim() : body.lastName;
+    if (body.email !== undefined) data.email = typeof body.email === 'string' ? body.email.trim() : body.email;
     if (body.password) data.password = await bcrypt.hash(body.password, 10);
     if (body.avatarUrl !== undefined) data.avatarUrl = body.avatarUrl ? String(body.avatarUrl).trim() : null;
 
-    const user = await this.prisma.user.update({ where: { id: userId }, data });
-    return {
-      ok: true,
-      user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null },
-    };
+    try {
+      const user = await this.prisma.user.update({ where: { id: userId }, data });
+      return {
+        ok: true,
+        user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null },
+      };
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        const target = e?.meta?.target;
+        if (String(target).includes('email')) return { ok: false, message: 'Email já cadastrado.' };
+        if (String(target).includes('username')) return { ok: false, message: 'Username já cadastrado.' };
+      }
+      // eslint-disable-next-line no-console
+      console.error('Erro ao atualizar usuário (me):', e);
+      return { ok: false, message: 'Erro ao atualizar usuário.' };
+    }
   }
 
   // Adicionar vínculo empresa-usuário (ADMIN)

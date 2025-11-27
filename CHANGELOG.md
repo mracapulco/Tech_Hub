@@ -4,6 +4,19 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.5] — 2025-11-27
+
+### Adicionado
+- Arquivo `docker-compose.prod.yml` para execução em produção (Ubuntu LTS), com `NODE_ENV=production`, reinício automático e separação de serviços `db`, `api` e `web`.
+
+### Alterado
+- Configuração de build da `web` via argumento `NEXT_PUBLIC_API_URL` no compose de produção.
+- Versões atualizadas: root e web `0.3.5`.
+
+### Operacional
+- Preparação para deploy em servidor (instalação do Docker e Compose, criação de `.env` com `JWT_SECRET` e `CONFIG_MASTER_KEY`).
+- Publicação como versão principal em `main` a partir do estado atual.
+
 ## [0.3.4] — 2025-11-04
 
 ### Adicionado
