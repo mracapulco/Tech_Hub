@@ -15,6 +15,7 @@ import { SettingsModule } from './settings/settings.module';
 import { IpamModule } from './ipam/ipam.module';
 import { SitesModule } from './sites/sites.module';
 import { VlansModule } from './vlans/vlans.module';
+import { ZabbixModule } from './integrations/zabbix/zabbix.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { VlansModule } from './vlans/vlans.module';
     IpamModule,
     SitesModule,
     VlansModule,
+    ZabbixModule,
   ],
   controllers: [AppController],
   providers: [AppService],
