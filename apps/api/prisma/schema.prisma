@@ -46,6 +46,9 @@ model Company {
 
   memberships UserCompanyMembership[]
   maturityAssessments MaturityAssessment[]
+  sites      Site[]
+  vrfs       Vrf[]
+  subnets    IpSubnet[]
 }
 
 model UserCompanyMembership {
@@ -159,4 +162,90 @@ model MaturityAnalysis {
   createdById   String?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+}
+
+enum IpAddressStatus {
+  ASSIGNED
+  RESERVED
+}
+
+model Vrf {
+  id        String   @id @default(uuid())
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subnets   IpSubnet[]
+
+  @@unique([companyId, name])
+}
+
+model Site {
+  id        String   @id @default(uuid())
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  name      String
+  city      String?
+  state     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vlans     Vlan[]
+  subnets   IpSubnet[]
+
+  @@unique([companyId, name])
+}
+
+model Vlan {
+  id        String   @id @default(uuid())
+  site      Site     @relation(fields: [siteId], references: [id])
+  siteId    String
+  number    Int
+  name      String
+  purpose   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subnets   IpSubnet[]
+
+  @@unique([siteId, number])
+}
+
+model IpSubnet {
+  id          String   @id @default(uuid())
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  site        Site?    @relation(fields: [siteId], references: [id])
+  siteId      String?
+  vrf         Vrf?     @relation(fields: [vrfId], references: [id])
+  vrfId       String?
+  vlan        Vlan?    @relation(fields: [vlanId], references: [id])
+  vlanId      String?
+  name        String
+  cidr        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addresses   IpAddress[]
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([vrfId])
+  @@index([vlanId])
+}
+
+model IpAddress {
+  id         String          @id @default(uuid())
+  subnet     IpSubnet        @relation(fields: [subnetId], references: [id])
+  subnetId   String
+  address    String
+  hostname   String?
+  status     IpAddressStatus @default(ASSIGNED)
+  assignedTo String?
+  createdAt  DateTime        @default(now())
+
+  @@unique([subnetId, address])
 }

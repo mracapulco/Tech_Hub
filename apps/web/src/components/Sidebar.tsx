@@ -76,6 +76,73 @@ export default function Sidebar() {
           {!collapsed && <span>Dashboard</span>}
         </Link>
 
+        {!collapsed ? (
+          <details>
+            <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
+                <circle cx="12" cy="12" r="9" strokeWidth="2" />
+              </svg>
+              <span className="ml-3">Gestão</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4 ml-auto">
+                <path d="M9 18l6-6-6-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </summary>
+            <div className="mt-1 ml-6 space-y-1">
+              <Link href="/ipam" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="IPAM">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <circle cx="12" cy="12" r="9" strokeWidth="2" />
+                </svg>
+                <span>IPAM</span>
+              </Link>
+              <Link href="/ipam/sites" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Sites">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M3 21V7l9-4 9 4v14H3z" strokeWidth="2" />
+                </svg>
+                <span>Sites</span>
+              </Link>
+              <Link href="/ipam/vlans" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="VLANs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>VLANs</span>
+              </Link>
+            </div>
+          </details>
+        ) : (
+          <div className="relative group">
+            <Link
+              href="/ipam"
+              className={`flex items-center w-full ${collapsed ? 'justify-center' : 'gap-3'} px-2 py-2 rounded hover:bg-sidebarHover`}
+              title="Gestão"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
+                <circle cx="12" cy="12" r="9" strokeWidth="2" />
+              </svg>
+            </Link>
+            <div className="absolute left-full top-0 ml-2 w-48 bg-card border border-border rounded shadow p-2 hidden group-hover:block z-50 text-text">
+              <div className="text-xs text-muted px-1 pb-1">Gestão</div>
+              <Link href="/ipam" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="IPAM">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <circle cx="12" cy="12" r="9" strokeWidth="2" />
+                </svg>
+                <span>IPAM</span>
+              </Link>
+              <Link href="/ipam/sites" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Sites">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M3 21V7l9-4 9 4v14H3z" strokeWidth="2" />
+                </svg>
+                <span>Sites</span>
+              </Link>
+              <Link href="/ipam/vlans" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="VLANs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>VLANs</span>
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Segurança → Maturidade / Vulnerabilidades */}
         {!collapsed ? (
           <details>

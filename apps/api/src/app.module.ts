@@ -12,6 +12,9 @@ import { DeviceTypesModule } from './device-types/device-types.module';
 import { BrandsModule } from './brands/brands.module';
 import { DevicesModule } from './devices/devices.module';
 import { SettingsModule } from './settings/settings.module';
+import { IpamModule } from './ipam/ipam.module';
+import { SitesModule } from './sites/sites.module';
+import { VlansModule } from './vlans/vlans.module';
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { SettingsModule } from './settings/settings.module';
     BrandsModule,
     DevicesModule,
     SettingsModule,
+    IpamModule,
+    SitesModule,
+    VlansModule,
   ],
   controllers: [AppController],
   providers: [AppService],

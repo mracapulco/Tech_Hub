@@ -4,6 +4,24 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.6] — 2025-12-02
+
+### Adicionado
+- IPAM: modelos Prisma `Site`, `Vlan`, `Vrf` e vínculos em `IpSubnet` (siteId/vlanId/vrfId).
+- API: módulos `Sites` e `VLANs` com listagem/criação; IPAM expandido com filtros e estatísticas de ocupação.
+- Permissões: escrita (criar/editar/excluir) restrita a admin/técnico; clientes somente leitura (aplicado em IPAM, Sites e VLANs).
+- Web (IPAM): páginas para Sites, VLANs e IPAM com vínculo por empresa; exportação CSV/PDF com logo do cliente e Tech Hub.
+- Web (IPAM): ordenação por colunas (Nome, CIDR, Descrição) e exibição das colunas “Site” e “VLAN”.
+
+### Alterado
+- Web (Sidebar): seção “Gestão” com itens IPAM, Sites e VLANs.
+- Web (IPAM): removida a seção de “Planejar Endereçamento por Site” após testes; mantido painel de ocupação e exportação.
+- Infra: `docker-compose.yml` ajustado para usar `NEXT_PUBLIC_API_URL` do `.env` (acesso em rede local).
+
+### Operacional
+- Build e subida de containers `api` e `web`; sincronização de schema Prisma via compose.
+- Preparação para integração Zabbix: base de Settings com criptografia (`CONFIG_MASTER_KEY`).
+
 ## [0.3.5] — 2025-11-27
 
 ### Adicionado

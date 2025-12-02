@@ -25,7 +25,7 @@ services:
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY}
     depends_on:
       - db
-    volumes:
+cat > .env << 'EOF' CONFIG_MASTER_KEY=troque_por_um_valor_forte JWT_SECRET=troque_por_um_valor_forte NEXT_PUBLIC_API_URL=http://localhost:4000 EOF    volumes:
       - uploads_data:/app/uploads
     ports:
       - "4000:3000"
