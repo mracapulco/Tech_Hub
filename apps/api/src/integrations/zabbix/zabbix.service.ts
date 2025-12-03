@@ -37,7 +37,7 @@ export class ZabbixService {
     return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
   }
 
-  async sync(companyId: string) {
+  async sync(companyId: string, debug?: boolean) {
     const cfg = (await this.settings.getZabbixConfig(companyId)) as ZabbixConfig | null;
     if (!cfg) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
     const url = cfg.url.replace(/\/$/, '') + '/api_jsonrpc.php';
@@ -72,12 +72,15 @@ export class ZabbixService {
     const subnets = await this.prisma.ipSubnet.findMany({ where: { companyId }, orderBy: { name: 'asc' } });
     const ranges = subnets.map((s) => ({ id: s.id, cidr: s.cidr, ...this.parseCidr(s.cidr) }));
     let created = 0;
+    let ipMissing = 0;
+    let unmatched = 0;
+    const unmatchedSamples: Array<{ host: string; ip?: string }> = [];
     for (const h of hosts) {
       const iface = Array.isArray(h?.interfaces) ? h.interfaces.find((i: any) => i?.ip && i.ip !== '127.0.0.1' && !i.ip.startsWith('169.254.')) : null;
-      if (!iface?.ip) continue;
+      if (!iface?.ip) { ipMissing++; if (debug && unmatchedSamples.length < 50) unmatchedSamples.push({ host: String(h?.name || h?.host || ''), ip: undefined }); continue; }
       const ipInt = this.ipToInt(String(iface.ip));
       const range = ranges.find((r) => ipInt >= r.start && ipInt <= r.end);
-      if (!range) continue;
+      if (!range) { unmatched++; if (debug && unmatchedSamples.length < 50) unmatchedSamples.push({ host: String(h?.name || h?.host || ''), ip: String(iface.ip) }); continue; }
       const hostname = String(iface.dns || h.name || h.host || '').trim();
       try {
         await this.prisma.ipAddress.upsert({
@@ -88,6 +91,20 @@ export class ZabbixService {
         created += 1;
       } catch {}
     }
-    return { ok: true, data: { totalHosts: hosts.length, addedOrUpdated: created } };
+    const baseDetails = { totalHosts: hosts.length, addedOrUpdated: created };
+    if (!debug) return { ok: true, data: baseDetails };
+    return {
+      ok: true,
+      data: {
+        ...baseDetails,
+        companyId,
+        subnetsTotal: subnets.length,
+        groupPrefix: cfg.groupPrefix || null,
+        groupIdsCount: groupIds.length,
+        ipMissing,
+        unmatched,
+        unmatchedSamples,
+      },
+    };
   }
 }

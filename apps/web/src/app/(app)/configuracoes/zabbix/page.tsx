@@ -70,10 +70,11 @@ export default function ZabbixConfigPage() {
     if (!token || !companyId) return;
     setSyncing(true); setSyncResult(null); setError(''); setMessage('');
     try {
-      const res = await apiPost<{ ok: boolean; data?: { totalHosts: number; addedOrUpdated: number }; error?: string }>(`/integrations/zabbix/sync`, token, { companyId });
+      const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/integrations/zabbix/sync`, token, { companyId, debug: true });
       if (res?.ok && res.data) {
-        setSyncResult(res.data);
-        setMessage(`Sincronização concluída: ${res.data.addedOrUpdated} adicionados/atualizados de ${res.data.totalHosts} hosts.`);
+        setSyncResult({ totalHosts: res.data.totalHosts, addedOrUpdated: res.data.addedOrUpdated });
+        setMessage(`Sincronização concluída: ${res.data.addedOrUpdated} adicionados/atualizados de ${res.data.totalHosts} hosts. Subnets: ${res.data.subnetsTotal}, sem IP: ${res.data.ipMissing}, fora de faixa: ${res.data.unmatched}.`);
+        
       } else {
         setError(res?.error || 'Falha na sincronização.');
       }
@@ -127,6 +128,14 @@ export default function ZabbixConfigPage() {
             <div className="text-sm">
               Total de hosts: {syncResult.totalHosts || 0}<br />
               Adicionados/Atualizados: {syncResult.addedOrUpdated || 0}
+              {message && (<div className="mt-2 text-xs text-muted">{message}</div>)}
+            </div>
+          )}
+          {message && message.includes('fora de faixa') && (
+            <div className="mt-3">
+              <div className="font-semibold mb-1">Amostras de hosts fora de faixa</div>
+              <div className="text-xs text-muted">Verifique se há subnets para estes IPs na empresa selecionada.</div>
+              {/* Nota: para simplificação, não armazenamos a lista completa no estado; podemos evoluir para exibir res.data.unmatchedSamples futuramente */}
             </div>
           )}
         </div>
