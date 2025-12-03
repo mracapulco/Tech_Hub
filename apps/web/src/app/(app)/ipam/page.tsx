@@ -35,7 +35,7 @@ export default function IpamPage() {
   const [isAdminOrTech, setIsAdminOrTech] = useState(false);
   const token = typeof window !== 'undefined' ? getToken() : null;
   const user = typeof window !== 'undefined' ? getUser() : null;
-  const [sortBy, setSortBy] = useState<'name'|'cidr'|'description'>('name');
+  const [sortBy, setSortBy] = useState<'name'|'cidr'|'description'|'site'|'vlan'>('name');
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc');
 
   useEffect(() => {
@@ -131,7 +131,7 @@ export default function IpamPage() {
     lines.push('');
     lines.push(['Subnet', 'CIDR', 'Site', 'VLAN', 'Capacidade', 'Usados', 'Ocupação (%)', 'Saúde'].map(csvEscape).join(','));
     const mapStats = new Map(stats.map(s => [s.id, s] as [string, SubnetStats]));
-    subnets.forEach((s) => {
+    sortedSubnets.forEach((s) => {
       const st = mapStats.get(s.id);
       const cap = capacityFromCidr(s.cidr);
       const used = st?.usageCount || 0;
@@ -156,6 +156,16 @@ export default function IpamPage() {
   function exportPDF() {
     const companyName = companies.find(c => c.id === companyId)?.name || 'Empresa';
     const companyLogo = imgUrl(companyDetail?.logoUrl || '');
+    const totalCap = subnets.reduce((sum, s) => sum + capacityFromCidr(s.cidr), 0);
+    const usedMap = new Map(stats.map(s => [s.id, s.usageCount] as [string, number]));
+    const totalUsed = subnets.reduce((sum, s) => sum + (usedMap.get(s.id) || 0), 0);
+    const avgOcc = totalCap > 0 ? Math.round((totalUsed / totalCap) * 100) : 0;
+    const top = [...subnets].map(s => {
+      const cap = capacityFromCidr(s.cidr);
+      const used = usedMap.get(s.id) || 0;
+      const occ = cap > 0 ? Math.round((used / cap) * 100) : 0;
+      return { id: s.id, name: s.name, cidr: s.cidr, occ };
+    }).sort((a,b)=>b.occ-a.occ).slice(0,10);
     const styles = `
       <style>
         * { box-sizing: border-box; }
@@ -170,11 +180,33 @@ export default function IpamPage() {
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
         th, td { border: 1px solid #e5e7eb; padding: 8px; font-size: 13px; }
         th { background: #f9fafb; text-align: left; }
+        .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+        .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #ffffff; }
+        .big { font-size: 22px; font-weight: 600; }
+        .muted { color: #6b7280; font-size: 12px; }
+        .chart { margin-top: 8px; }
+        svg { display: block; }
+        @media print {
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
         @page { margin: 16mm; }
       </style>
     `;
     const intro = `Este relatório consolida o plano e o registro de endereçamento IP por site e VLAN, para apoiar decisões de infraestrutura. Os dados são processados internamente pelo Tech Hub.`;
-    const rows = subnets.map((s) => {
+    const chartBars = top.map(t => {
+      const color = t.occ >= 90 ? '#dc2626' : t.occ >= 70 ? '#f59e0b' : '#10b981';
+      const full = 300;
+      const filled = Math.round((t.occ / 100) * full);
+      return `<div style=\"display:flex;align-items:center;gap:8px;margin:6px 0\">
+        <div style=\"width:180px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">${t.name}</div>
+        <svg width=\"${full}\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\">
+          <rect x=\"0\" y=\"1\" width=\"${full}\" height=\"8\" fill=\"#e5e7eb\" rx=\"4\" ry=\"4\" />
+          <rect x=\"0\" y=\"1\" width=\"${filled}\" height=\"8\" fill=\"${color}\" rx=\"4\" ry=\"4\" />
+        </svg>
+        <div style=\"width:40px;text-align:right;font-size:12px\">${t.occ}%</div>
+      </div>`;
+    }).join('');
+    const rows = sortedSubnets.map((s) => {
       const st = stats.find(x => x.id === s.id);
       const cap = capacityFromCidr(s.cidr);
       const used = st?.usageCount || 0;
@@ -221,6 +253,14 @@ export default function IpamPage() {
             </div>
             <h2>Introdução</h2>
             <p>${intro}</p>
+            <h2>Resumo</h2>
+            <div class=\"cards\">
+              <div class=\"card\"><div class=\"big\">${subnets.length}</div><div class=\"muted\">Subnets</div></div>
+              <div class=\"card\"><div class=\"big\">${totalUsed}</div><div class=\"muted\">IPs usados</div></div>
+              <div class=\"card\"><div class=\"big\">${avgOcc}%</div><div class=\"muted\">Ocupação média</div></div>
+            </div>
+            <h2>Top 10 por ocupação</h2>
+            <div class=\"chart\">${chartBars || '<div class=\"muted\">Sem dados.</div>'}</div>
             <h2>Subnets</h2>
             <table>
               <thead>
@@ -274,7 +314,7 @@ export default function IpamPage() {
     return { ipInt: ipToInt(ip), mask: Number.isFinite(mask) ? mask : 0, raw: c };
   }
 
-  function toggleSort(col: 'name'|'cidr'|'description') {
+  function toggleSort(col: 'name'|'cidr'|'description'|'site'|'vlan') {
     if (sortBy === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortBy(col); setSortDir('asc'); }
   }
@@ -289,6 +329,16 @@ export default function IpamPage() {
       const av = String(a.description || '');
       const bv = String(b.description || '');
       cmp = av.localeCompare(bv);
+    } else if (sortBy === 'site') {
+      const an = a.siteId ? (sites.find(x => x.id === a.siteId)?.name || '') : '';
+      const bn = b.siteId ? (sites.find(x => x.id === b.siteId)?.name || '') : '';
+      cmp = an.localeCompare(bn);
+    } else if (sortBy === 'vlan') {
+      const av = a.vlanId ? vlans.find(x => x.id === a.vlanId) : undefined;
+      const bv = b.vlanId ? vlans.find(x => x.id === b.vlanId) : undefined;
+      if (av && bv) {
+        if (av.number !== bv.number) cmp = av.number - bv.number; else cmp = String(av.name || '').localeCompare(String(bv.name || ''));
+      } else if (av && !bv) cmp = 1; else if (!av && bv) cmp = -1; else cmp = 0;
     } else {
       const pa = parseCidr(String(a.cidr || ''));
       const pb = parseCidr(String(b.cidr || ''));
@@ -426,8 +476,8 @@ export default function IpamPage() {
                 <tr className="text-left border-b border-border">
                   <th className="py-2 cursor-pointer" onClick={() => toggleSort('name')}>Nome {sortBy==='name' ? (sortDir==='asc' ? '↑' : '↓') : ''}</th>
                   <th className="py-2 cursor-pointer" onClick={() => toggleSort('cidr')}>CIDR {sortBy==='cidr' ? (sortDir==='asc' ? '↑' : '↓') : ''}</th>
-                  <th className="py-2">Site</th>
-                  <th className="py-2">VLAN</th>
+                  <th className="py-2 cursor-pointer" onClick={() => toggleSort('site')}>Site {sortBy==='site' ? (sortDir==='asc' ? '↑' : '↓') : ''}</th>
+                  <th className="py-2 cursor-pointer" onClick={() => toggleSort('vlan')}>VLAN {sortBy==='vlan' ? (sortDir==='asc' ? '↑' : '↓') : ''}</th>
                   <th className="py-2 cursor-pointer" onClick={() => toggleSort('description')}>Descrição {sortBy==='description' ? (sortDir==='asc' ? '↑' : '↓') : ''}</th>
                   {isAdminOrTech && <th className="py-2">Ações</th>}
                 </tr>

@@ -162,3 +162,18 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Observações
 - Os testes continuam armazenados em `localStorage` (`cyber:maturity:list`). Em futuras versões, considerar persistência via API.
+## [0.3.7] — 2025-12-03
+
+### Adicionado
+- Integração Zabbix (web): página em Configurações com formulário de URL/Token/Prefixo e botão de sincronização, incluindo modo debug com métricas detalhadas.
+- PDF IPAM: resumo com cards (subnets, IPs usados, ocupação média) e "Top 10 por ocupação" com barras SVG e ajuste de cores para impressão.
+- Ordenação no IPAM por "Site" e "VLAN"; exportações (CSV/PDF) respeitam a ordenação da visualização.
+
+### Alterado
+- Filtro de grupos do Zabbix: estrito por prefixo (nome igual ou `prefixo/…`) e busca prévia de `groupids` via `hostgroup.get`.
+- Sincronização Zabbix: opção de fallback DNS (controlada na UI), timeouts nas chamadas e contadores de debug (sem IP/fora de faixa/removidos por filtro).
+- PDF IPAM: impressão mais confiável com SVG; cabeçalho e layout aprimorados.
+
+### Corrigido
+- Cálculo de matching de CIDR por inteiros (start/end) para faixas como `192.168.1.0/24` e semelhantes.
+- Respeito à ordenação escolhida na tela ao exportar CSV e PDF.

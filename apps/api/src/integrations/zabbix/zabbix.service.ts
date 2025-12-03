@@ -22,20 +22,25 @@ export class ZabbixService {
   }
 
   private parseCidr(cidr: string) {
-    const [ip, maskStr] = cidr.split('/');
-    const mask = Number(maskStr);
+    const [ipRaw, maskRaw] = cidr.split('/');
+    const ip = String(ipRaw || '').trim();
+    const mask = Number(String(maskRaw || '').trim());
     const parts = ip.split('.').map((p) => Number(p));
-    const base = ((parts[0] << 24) >>> 0) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
-    const size = 2 ** (32 - mask);
-    const start = base & ((~0 << (32 - mask)) >>> 0);
-    const end = start + size - 1;
+    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v) || v < 0 || v > 255) || !Number.isFinite(mask) || mask < 0 || mask > 32) {
+      return { start: 0, end: -1 };
+    }
+    const ipInt = (((parts[0] * 256 + parts[1]) * 256 + parts[2]) * 256 + parts[3]) >>> 0;
+    const block = 2 ** (32 - mask);
+    const start = Math.floor(ipInt / block) * block;
+    const end = start + block - 1;
     return { start, end };
   }
 
   private ipToInt(ip: string): number {
-    const p = ip.split('.').map((x) => Number(x));
-    if (p.length !== 4 || p.some((v) => !Number.isFinite(v))) return 0;
-    return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+    const p = String(ip || '').trim().split('.').map((x) => Number(x));
+    if (p.length !== 4 || p.some((v) => !Number.isFinite(v) || v < 0 || v > 255)) return 0;
+    const n = (((p[0] * 256 + p[1]) * 256 + p[2]) * 256 + p[3]) >>> 0;
+    return n;
   }
 
   private async postJson(url: string, headers: any, body: any, timeoutMs = 10000): Promise<any> {
@@ -108,7 +113,7 @@ export class ZabbixService {
       groupFiltered = before - hosts.length;
     }
     const subnets = await this.prisma.ipSubnet.findMany({ where: { companyId }, orderBy: { name: 'asc' } });
-    const ranges = subnets.map((s) => ({ id: s.id, cidr: s.cidr, ...this.parseCidr(s.cidr) }));
+    const ranges = subnets.map((s) => ({ id: s.id, cidr: String(s.cidr || '').trim(), ...this.parseCidr(String(s.cidr || '').trim()) }));
     let created = 0;
     let ipMissing = 0;
     let unmatched = 0;
@@ -148,6 +153,7 @@ export class ZabbixService {
         ipMissing,
         unmatched,
         unmatchedSamples,
+        cidrs: subnets.map((s) => String(s.cidr || '').trim()),
       },
     };
   }

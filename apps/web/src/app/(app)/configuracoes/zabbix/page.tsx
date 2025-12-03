@@ -141,6 +141,9 @@ export default function ZabbixConfigPage() {
                 <div className="mt-2 text-xs text-muted">
                   Subnets (empresa): {debugData.subnetsTotal ?? 0} · Filtro grupos: {debugData.groupPrefix ?? '—'} ({debugData.groupIdsCount ?? 0} grupos) · Removidos pelo filtro: {debugData.groupFiltered ?? 0}
                   <br />Sem IP: {debugData.ipMissing ?? 0} · Fora de faixa: {debugData.unmatched ?? 0}
+                  {Array.isArray(debugData.cidrs) && debugData.cidrs.length > 0 && (
+                    <div className="mt-1">CIDRs: {debugData.cidrs.join(', ')}</div>
+                  )}
                 </div>
               )}
             </div>
