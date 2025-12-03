@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { SettingsService } from '../../settings/settings.service';
+import { promises as dns } from 'dns';
 
 type ZabbixConfig = { url: string; token: string; groupPrefix?: string };
 
@@ -37,7 +38,33 @@ export class ZabbixService {
     return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
   }
 
-  async sync(companyId: string, debug?: boolean) {
+  private async postJson(url: string, headers: any, body: any, timeoutMs = 10000): Promise<any> {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
+      return await res.json();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  private async resolveDns(name: string, timeoutMs = 1500): Promise<string | undefined> {
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const r: any = await dns.lookup(name, { family: 4 });
+        return r?.address ? String(r.address) : undefined;
+      } finally {
+        clearTimeout(t);
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  async sync(companyId: string, debug?: boolean, dnsFallback?: boolean) {
     const cfg = (await this.settings.getZabbixConfig(companyId)) as ZabbixConfig | null;
     if (!cfg) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
     const url = cfg.url.replace(/\/$/, '') + '/api_jsonrpc.php';
@@ -46,8 +73,7 @@ export class ZabbixService {
     if (cfg.groupPrefix) {
       try {
         const gpPayload = { jsonrpc: '2.0', method: 'hostgroup.get', params: { output: ['groupid', 'name'], search: { name: cfg.groupPrefix }, searchWildcardsEnabled: true }, id: 1 };
-        const gpRes = await fetch(url, { method: 'POST', headers, body: JSON.stringify(gpPayload) });
-        const gpData = await gpRes.json();
+        const gpData = await this.postJson(url, headers, gpPayload, 10000);
         const groups: any[] = Array.isArray(gpData?.result) ? gpData.result : [];
         groupIds = groups.map((g: any) => String(g.groupid)).filter(Boolean);
       } catch {
@@ -63,12 +89,24 @@ export class ZabbixService {
     const payload = { jsonrpc: '2.0', method: 'host.get', params, id: 2 };
     let data: any;
     try {
-      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-      data = await res.json();
+      data = await this.postJson(url, headers, payload, 15000);
     } catch (e) {
       return { ok: false, error: 'Falha ao consultar Zabbix.' };
     }
-    const hosts: any[] = Array.isArray(data?.result) ? data.result : [];
+    let hosts: any[] = Array.isArray(data?.result) ? data.result : [];
+    const prefix = (cfg.groupPrefix || '').trim().replace(/\/+$/, '');
+    let groupFiltered = 0;
+    if (prefix) {
+      const before = hosts.length;
+      hosts = hosts.filter((h: any) => {
+        const groups: any[] = Array.isArray(h?.groups) ? h.groups : [];
+        return groups.some((g: any) => {
+          const n = String(g?.name || '').trim();
+          return n === prefix || n.startsWith(prefix + '/');
+        });
+      });
+      groupFiltered = before - hosts.length;
+    }
     const subnets = await this.prisma.ipSubnet.findMany({ where: { companyId }, orderBy: { name: 'asc' } });
     const ranges = subnets.map((s) => ({ id: s.id, cidr: s.cidr, ...this.parseCidr(s.cidr) }));
     let created = 0;
@@ -76,17 +114,22 @@ export class ZabbixService {
     let unmatched = 0;
     const unmatchedSamples: Array<{ host: string; ip?: string }> = [];
     for (const h of hosts) {
-      const iface = Array.isArray(h?.interfaces) ? h.interfaces.find((i: any) => i?.ip && i.ip !== '127.0.0.1' && !i.ip.startsWith('169.254.')) : null;
-      if (!iface?.ip) { ipMissing++; if (debug && unmatchedSamples.length < 50) unmatchedSamples.push({ host: String(h?.name || h?.host || ''), ip: undefined }); continue; }
-      const ipInt = this.ipToInt(String(iface.ip));
+      let iface = Array.isArray(h?.interfaces) ? h.interfaces.find((i: any) => i?.ip && i.ip !== '127.0.0.1' && !String(i.ip).startsWith('169.254.')) : null;
+      let ipStr: string | undefined = iface?.ip;
+      if ((!ipStr || ipStr === '0.0.0.0') && dnsFallback) {
+        const dnsName = iface?.dns || String(h?.name || h?.host || '');
+        if (dnsName) ipStr = await this.resolveDns(dnsName, 1500);
+      }
+      if (!ipStr) { ipMissing++; if (debug && unmatchedSamples.length < 50) unmatchedSamples.push({ host: String(h?.name || h?.host || ''), ip: undefined }); continue; }
+      const ipInt = this.ipToInt(String(ipStr));
       const range = ranges.find((r) => ipInt >= r.start && ipInt <= r.end);
-      if (!range) { unmatched++; if (debug && unmatchedSamples.length < 50) unmatchedSamples.push({ host: String(h?.name || h?.host || ''), ip: String(iface.ip) }); continue; }
+      if (!range) { unmatched++; if (debug && unmatchedSamples.length < 50) unmatchedSamples.push({ host: String(h?.name || h?.host || ''), ip: String(ipStr) }); continue; }
       const hostname = String(iface.dns || h.name || h.host || '').trim();
       try {
         await this.prisma.ipAddress.upsert({
-          where: { subnetId_address: { subnetId: range.id, address: iface.ip } },
+          where: { subnetId_address: { subnetId: range.id, address: ipStr } },
           update: { hostname, status: 'ASSIGNED' },
-          create: { subnetId: range.id, address: iface.ip, hostname, status: 'ASSIGNED' },
+          create: { subnetId: range.id, address: ipStr, hostname, status: 'ASSIGNED' },
         });
         created += 1;
       } catch {}
@@ -101,6 +144,7 @@ export class ZabbixService {
         subnetsTotal: subnets.length,
         groupPrefix: cfg.groupPrefix || null,
         groupIdsCount: groupIds.length,
+        groupFiltered,
         ipMissing,
         unmatched,
         unmatchedSamples,

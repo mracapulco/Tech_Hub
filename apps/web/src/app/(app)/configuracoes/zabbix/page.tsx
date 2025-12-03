@@ -16,8 +16,10 @@ export default function ZabbixConfigPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ totalHosts?: number; addedOrUpdated?: number } | null>(null);
+  const [debugData, setDebugData] = useState<any | null>(null);
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [dnsFallback, setDnsFallback] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -70,10 +72,11 @@ export default function ZabbixConfigPage() {
     if (!token || !companyId) return;
     setSyncing(true); setSyncResult(null); setError(''); setMessage('');
     try {
-      const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/integrations/zabbix/sync`, token, { companyId, debug: true });
+      const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/integrations/zabbix/sync`, token, { companyId, debug: true, dnsFallback });
       if (res?.ok && res.data) {
         setSyncResult({ totalHosts: res.data.totalHosts, addedOrUpdated: res.data.addedOrUpdated });
-        setMessage(`Sincronização concluída: ${res.data.addedOrUpdated} adicionados/atualizados de ${res.data.totalHosts} hosts. Subnets: ${res.data.subnetsTotal}, sem IP: ${res.data.ipMissing}, fora de faixa: ${res.data.unmatched}.`);
+        setDebugData(res.data);
+        setMessage(`Sincronização concluída.`);
         
       } else {
         setError(res?.error || 'Falha na sincronização.');
@@ -112,10 +115,16 @@ export default function ZabbixConfigPage() {
             <input value={groupPrefix} onChange={(e) => setGroupPrefix(e.target.value)} className="w-full border border-border rounded px-2 py-2" placeholder="Ex.: TGM" />
             <div className="text-xs text-muted mt-1">Ajuda a limitar a sincronização aos grupos do cliente (ex.: TGM/...).</div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={saveConfig} disabled={loading || !companyId} className="px-4 py-2 bg-primary text-white rounded disabled:opacity-50">{loading ? 'Salvando...' : 'Salvar Configuração'}</button>
-            <button onClick={runSync} disabled={syncing || !companyId} className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">{syncing ? 'Sincronizando...' : 'Sincronizar Zabbix'}</button>
-          </div>
+        <div className="flex gap-2">
+          <button onClick={saveConfig} disabled={loading || !companyId} className="px-4 py-2 bg-primary text-white rounded disabled:opacity-50">{loading ? 'Salvando...' : 'Salvar Configuração'}</button>
+          <button onClick={runSync} disabled={syncing || !companyId} className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">{syncing ? 'Sincronizando...' : 'Sincronizar Zabbix'}</button>
+        </div>
+        <div className="mt-2">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={dnsFallback} onChange={(e) => setDnsFallback(e.target.checked)} />
+            Usar fallback DNS (mais lento)
+          </label>
+        </div>
           {message && (<div className="mt-2 text-sm text-green-700">{message}</div>)}
           {error && (<div className="mt-2 text-sm text-red-700">{error}</div>)}
         </div>
@@ -128,14 +137,28 @@ export default function ZabbixConfigPage() {
             <div className="text-sm">
               Total de hosts: {syncResult.totalHosts || 0}<br />
               Adicionados/Atualizados: {syncResult.addedOrUpdated || 0}
-              {message && (<div className="mt-2 text-xs text-muted">{message}</div>)}
+              {debugData && (
+                <div className="mt-2 text-xs text-muted">
+                  Subnets (empresa): {debugData.subnetsTotal ?? 0} · Filtro grupos: {debugData.groupPrefix ?? '—'} ({debugData.groupIdsCount ?? 0} grupos) · Removidos pelo filtro: {debugData.groupFiltered ?? 0}
+                  <br />Sem IP: {debugData.ipMissing ?? 0} · Fora de faixa: {debugData.unmatched ?? 0}
+                </div>
+              )}
             </div>
           )}
-          {message && message.includes('fora de faixa') && (
+          {debugData && Array.isArray(debugData.unmatchedSamples) && debugData.unmatchedSamples.length > 0 && (
             <div className="mt-3">
               <div className="font-semibold mb-1">Amostras de hosts fora de faixa</div>
-              <div className="text-xs text-muted">Verifique se há subnets para estes IPs na empresa selecionada.</div>
-              {/* Nota: para simplificação, não armazenamos a lista completa no estado; podemos evoluir para exibir res.data.unmatchedSamples futuramente */}
+              <div className="text-xs text-muted mb-2">Crie os subnets correspondentes na empresa para estes IPs e re-sincronize.</div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-border"><th className="py-1">Host</th><th className="py-1">IP</th></tr>
+                </thead>
+                <tbody>
+                  {debugData.unmatchedSamples.slice(0,10).map((s: any, idx: number) => (
+                    <tr key={idx} className="border-b border-border"><td className="py-1">{s.host || '—'}</td><td className="py-1">{s.ip || '—'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
