@@ -242,6 +242,12 @@ export default function Sidebar() {
                 </svg>
                 <span>Tipo de dispositivo</span>
               </Link>
+              <Link href="/configuracoes/zabbix" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Zabbix">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>Zabbix</span>
+              </Link>
               {isAdmin && (
                 <Link href="/configuracoes/ia" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="IA">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
@@ -294,6 +300,12 @@ export default function Sidebar() {
                   <path d="M4 4h16v6H4zM4 14h10v6H4z" strokeWidth="2" strokeLinejoin="round" />
                 </svg>
                 <span>Tipo de dispositivo</span>
+              </Link>
+              <Link href="/configuracoes/zabbix" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Zabbix">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>Zabbix</span>
               </Link>
               {isAdmin && (
                 <Link href="/configuracoes/ia" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="IA">

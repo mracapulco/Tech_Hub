@@ -42,13 +42,25 @@ export class ZabbixService {
     if (!cfg) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
     const url = cfg.url.replace(/\/$/, '') + '/api_jsonrpc.php';
     const headers: any = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.token}` };
+    let groupIds: string[] = [];
+    if (cfg.groupPrefix) {
+      try {
+        const gpPayload = { jsonrpc: '2.0', method: 'hostgroup.get', params: { output: ['groupid', 'name'], search: { name: cfg.groupPrefix }, searchWildcardsEnabled: true }, id: 1 };
+        const gpRes = await fetch(url, { method: 'POST', headers, body: JSON.stringify(gpPayload) });
+        const gpData = await gpRes.json();
+        const groups: any[] = Array.isArray(gpData?.result) ? gpData.result : [];
+        groupIds = groups.map((g: any) => String(g.groupid)).filter(Boolean);
+      } catch {
+        groupIds = [];
+      }
+    }
     const params: any = {
       output: ['host', 'name', 'status'],
       selectInterfaces: ['ip', 'dns', 'useip'],
       selectGroups: ['groupid', 'name'],
     };
-    if (cfg.groupPrefix) params.search = { name: cfg.groupPrefix };
-    const payload = { jsonrpc: '2.0', method: 'host.get', params, id: 1 };
+    if (groupIds.length > 0) params.groupids = groupIds;
+    const payload = { jsonrpc: '2.0', method: 'host.get', params, id: 2 };
     let data: any;
     try {
       const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
