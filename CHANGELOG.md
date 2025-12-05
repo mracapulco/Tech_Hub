@@ -220,3 +220,11 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Operacional
 - Versões atualizadas: root e web `0.3.10`.
+
+## [0.3.11] — 2025-12-05
+
+### Adicionado
+- IPAM: preenchimento automático do “Nome do Subnet” e “Descrição” ao selecionar Empresa + Site + VLAN (usa `name` e `purpose` da VLAN).
+
+### Operacional
+- Versões atualizadas: root e web `0.3.11`.

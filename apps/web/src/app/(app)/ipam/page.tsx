@@ -7,7 +7,7 @@ import { getUser } from '@/lib/auth';
 
 type Company = { id: string; name: string };
 type Site = { id: string; name: string };
-type Vlan = { id: string; siteId: string; number: number; name: string };
+type Vlan = { id: string; siteId: string; number: number; name: string; purpose?: string | null };
 type Subnet = { id: string; name: string; cidr: string; description?: string | null; siteId?: string | null; vlanId?: string | null };
 type SubnetStats = Subnet & { usageCount: number };
 
@@ -86,6 +86,15 @@ export default function IpamPage() {
       if (Array.isArray(st)) setStats(st);
     })();
   }, [token, siteId]);
+
+  useEffect(() => {
+    if (!companyId || !siteId || !vlanId) return;
+    const v = vlans.find((x) => x.id === vlanId);
+    if (v) {
+      setName(v.name || `VLAN ${v.number}`);
+      setDescription(v.purpose || '');
+    }
+  }, [companyId, siteId, vlanId, vlans]);
 
   const onCreate = async () => {
     if (!token || !companyId || !name || !cidr) return;
