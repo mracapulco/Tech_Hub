@@ -9,7 +9,7 @@ export default function ZabbixConfigPage() {
   const token = typeof window !== 'undefined' ? getToken() : null;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState('');
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState('https://zabbix.techmaster.inf.br');
   const [tokenInput, setTokenInput] = useState('');
   const [groupPrefix, setGroupPrefix] = useState('');
   const [maskedToken, setMaskedToken] = useState<string>('');
@@ -31,19 +31,19 @@ export default function ZabbixConfigPage() {
 
   useEffect(() => {
     (async () => {
-      if (!token || !companyId) { setUrl(''); setGroupPrefix(''); setMaskedToken(''); setTokenInput(''); setSyncResult(null); return; }
+      if (!token || !companyId) { setUrl('https://zabbix.techmaster.inf.br'); setGroupPrefix(''); setMaskedToken(''); setTokenInput(''); setSyncResult(null); return; }
       try {
         const cfg = await apiGet<{ ok: boolean; data?: { url?: string; groupPrefix?: string; maskedToken?: string } }>(`/integrations/zabbix/config?companyId=${companyId}`, token);
         if (cfg?.ok && cfg.data) {
-          setUrl(cfg.data.url || '');
+          setUrl(cfg.data.url || 'https://zabbix.techmaster.inf.br');
           setGroupPrefix(cfg.data.groupPrefix || '');
           setMaskedToken(cfg.data.maskedToken || '');
           setTokenInput('');
         } else {
-          setUrl(''); setGroupPrefix(''); setMaskedToken(''); setTokenInput('');
+          setUrl('https://zabbix.techmaster.inf.br'); setGroupPrefix(''); setMaskedToken(''); setTokenInput('');
         }
       } catch {
-        setUrl(''); setGroupPrefix(''); setMaskedToken(''); setTokenInput('');
+        setUrl('https://zabbix.techmaster.inf.br'); setGroupPrefix(''); setMaskedToken(''); setTokenInput('');
       }
     })();
   }, [token, companyId]);
@@ -52,8 +52,8 @@ export default function ZabbixConfigPage() {
     if (!token || !companyId) return;
     setLoading(true); setMessage(''); setError('');
     try {
-      if (!url || !tokenInput) { setError('Informe URL e Token.'); return; }
-      const res = await apiPost<{ ok: boolean; error?: string }>(`/integrations/zabbix/config`, token, { companyId, url, token: tokenInput, groupPrefix: groupPrefix || undefined });
+      if (!url || !tokenInput || !groupPrefix) { setError('Informe URL, Token e Prefixo.'); return; }
+      const res = await apiPost<{ ok: boolean; error?: string }>(`/integrations/zabbix/config`, token, { companyId, url, token: tokenInput, groupPrefix });
       if (res?.ok) {
         setMessage('Configuração salva.');
         setMaskedToken(tokenInput.length > 8 ? `${tokenInput.slice(0,3)}****${tokenInput.slice(-4)}` : '****');
@@ -111,9 +111,9 @@ export default function ZabbixConfigPage() {
             <input value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={maskedToken ? `Atual: ${maskedToken}` : ''} className="w-full border border-border rounded px-2 py-2" />
           </div>
           <div className="mb-3">
-            <label className="block text-sm mb-1">Prefixo de grupo (opcional)</label>
-            <input value={groupPrefix} onChange={(e) => setGroupPrefix(e.target.value)} className="w-full border border-border rounded px-2 py-2" placeholder="Ex.: TGM" />
-            <div className="text-xs text-muted mt-1">Ajuda a limitar a sincronização aos grupos do cliente (ex.: TGM/...).</div>
+            <label className="block text-sm mb-1">Prefixo de grupo</label>
+            <input value={groupPrefix} onChange={(e) => setGroupPrefix(e.target.value)} className="w-full border border-border rounded px-2 py-2" placeholder="CLIENTE/TECHUB" />
+            <div className="text-xs text-muted mt-1">Ex.: CLIENTE/TECHUB · obrigatório para escopo dos grupos.</div>
           </div>
         <div className="flex gap-2">
           <button onClick={saveConfig} disabled={loading || !companyId} className="px-4 py-2 bg-primary text-white rounded disabled:opacity-50">{loading ? 'Salvando...' : 'Salvar Configuração'}</button>

@@ -104,6 +104,14 @@ export class IpamController {
     return this.service.listAddresses(subnetId);
   }
 
+  @Get('addresses-by-company')
+  async listAddressesByCompany(@Query('companyId') companyId: string, @Query('siteId') siteId: string | undefined, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getUserContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
+    return this.service.listAddressesByCompany(companyId, siteId);
+  }
+
   @Post('addresses')
   async upsertAddress(@Body() body: UpsertAddressDto, @Headers('authorization') authorization?: string) {
     const ctx = await this.getUserContext(authorization);
@@ -134,7 +142,7 @@ export class IpamController {
     const s = await this.service.getSubnet(id);
     if (!s) return { ok: false, error: 'Subnet não encontrada' };
     if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes((s as any).companyId)) return { ok: false, error: 'Forbidden' };
-    return this.prisma.ipSubnet.update({ where: { id }, data: { name: body.name ?? (s as any).name, description: body.description ?? (s as any).description, siteId: body.siteId ?? (s as any).siteId ?? null, vlanId: body.vlanId ?? (s as any).vlanId ?? null, vrfId: body.vrfId ?? (s as any).vrfId ?? null } });
+    return this.prisma.ipSubnet.update({ where: { id }, data: { name: body.name ?? (s as any).name, cidr: body.cidr ?? (s as any).cidr, description: body.description ?? (s as any).description, siteId: body.siteId ?? (s as any).siteId ?? null, vlanId: body.vlanId ?? (s as any).vlanId ?? null, vrfId: body.vrfId ?? (s as any).vrfId ?? null } });
   }
 
   @Delete('subnets/:id')

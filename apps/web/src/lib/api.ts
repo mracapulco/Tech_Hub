@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL as string;
+const API_URL = (process.env.NEXT_PUBLIC_API_URL as string) || '/api';
 
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {

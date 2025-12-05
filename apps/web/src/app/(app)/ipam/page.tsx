@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { getToken } from '@/lib/auth';
 import { getUser } from '@/lib/auth';
 
@@ -35,6 +36,7 @@ export default function IpamPage() {
   const [isAdminOrTech, setIsAdminOrTech] = useState(false);
   const token = typeof window !== 'undefined' ? getToken() : null;
   const user = typeof window !== 'undefined' ? getUser() : null;
+  const router = useRouter();
   const [sortBy, setSortBy] = useState<'name'|'cidr'|'description'|'site'|'vlan'>('name');
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc');
 
@@ -66,6 +68,10 @@ export default function IpamPage() {
         const det = await apiGet<{ ok: boolean; data?: any }>(`/companies/${companyId}`, token);
         if (det?.ok) setCompanyDetail(det.data);
       } catch {}
+      if (!siteId) {
+        const vAll = await apiGet<Vlan[]>(`/vlans?companyId=${companyId}`, token);
+        if (Array.isArray(vAll)) setVlans(vAll);
+      }
     })();
   }, [token, companyId]);
 
@@ -153,7 +159,7 @@ export default function IpamPage() {
     URL.revokeObjectURL(url);
   }
 
-  function exportPDF() {
+  async function exportPDF() {
     const companyName = companies.find(c => c.id === companyId)?.name || 'Empresa';
     const companyLogo = imgUrl(companyDetail?.logoUrl || '');
     const totalCap = subnets.reduce((sum, s) => sum + capacityFromCidr(s.cidr), 0);
@@ -166,6 +172,25 @@ export default function IpamPage() {
       const occ = cap > 0 ? Math.round((used / cap) * 100) : 0;
       return { id: s.id, name: s.name, cidr: s.cidr, occ };
     }).sort((a,b)=>b.occ-a.occ).slice(0,10);
+    const healthCounts = (() => {
+      let ok = 0, high = 0, critical = 0;
+      subnets.forEach(s => {
+        const cap = capacityFromCidr(s.cidr);
+        const used = usedMap.get(s.id) || 0;
+        const occ = occupancy(used, cap);
+        const h = health(occ);
+        if (h === 'OK') ok++; else if (h === 'Alto') high++; else critical++;
+      });
+      const total = subnets.length || 1;
+      const okP = Math.round((ok/total)*100), highP = Math.round((high/total)*100), critP = Math.round((critical/total)*100);
+      return { ok, high, critical, okP, highP, critP };
+    })();
+    const now = new Date().toLocaleString();
+    const addrMap = new Map<string, Array<{ address: string; hostname?: string; status?: string }>>();
+    for (const s of sortedSubnets) {
+      const list = await apiGet<Array<{ address: string; hostname?: string; status?: string }>>(`/ipam/addresses?subnetId=${s.id}`, token!);
+      if (Array.isArray(list)) addrMap.set(s.id, list);
+    }
     const styles = `
       <style>
         * { box-sizing: border-box; }
@@ -186,13 +211,21 @@ export default function IpamPage() {
         .muted { color: #6b7280; font-size: 12px; }
         .chart { margin-top: 8px; }
         svg { display: block; }
+        .section { margin-top: 16px; }
+        .section > h2 { border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+        .page-break { height: 1px; }
+        @media print { .page-break { page-break-after: always; } }
         @media print {
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         @page { margin: 16mm; }
+        .zebra tbody tr:nth-child(even) { background: #f9fafb; }
+        .tight td, .tight th { padding: 6px; font-size: 12px; }
+        .subnet-title { margin: 12px 0 6px; font-weight: 600; }
+        .addresses-wrap table thead tr th:nth-child(3), .addresses-wrap table tbody tr td:nth-child(3) { display: none; }
       </style>
     `;
-    const intro = `Este relatório consolida o plano e o registro de endereçamento IP por site e VLAN, para apoiar decisões de infraestrutura. Os dados são processados internamente pelo Tech Hub.`;
+    const intro = `Este documento apresenta o panorama de endereçamento IP da organização, consolidando subnets, ocupação e endereços cadastrados por site/VLAN. Foi gerado pelo Tech Hub em ${now} e é adequado para arquivamento interno, auditorias e planejamento de capacidade.`;
     const chartBars = top.map(t => {
       const color = t.occ >= 90 ? '#dc2626' : t.occ >= 70 ? '#f59e0b' : '#10b981';
       const full = 300;
@@ -206,6 +239,22 @@ export default function IpamPage() {
         <div style=\"width:40px;text-align:right;font-size:12px\">${t.occ}%</div>
       </div>`;
     }).join('');
+    const stackedSummary = (() => {
+      const total = Math.max(1, subnets.length);
+      const width = 380;
+      const okW = Math.round((healthCounts.ok/total)*width);
+      const highW = Math.round((healthCounts.high/total)*width);
+      const critW = Math.round((healthCounts.critical/total)*width);
+      return `<div style=\"display:flex;align-items:center;gap:8px;margin:6px 0\">
+        <div style=\"width:160px;font-size:12px\">Distribuição de saúde</div>
+        <svg width=\"${width}\" height=\"12\" xmlns=\"http://www.w3.org/2000/svg\">
+          <rect x=\"0\" y=\"2\" width=\"${okW}\" height=\"8\" fill=\"#10b981\" />
+          <rect x=\"${okW}\" y=\"2\" width=\"${highW}\" height=\"8\" fill=\"#f59e0b\" />
+          <rect x=\"${okW+highW}\" y=\"2\" width=\"${critW}\" height=\"8\" fill=\"#dc2626\" />
+        </svg>
+        <div style=\"font-size:12px\">OK ${healthCounts.okP}% • Alto ${healthCounts.highP}% • Crítico ${healthCounts.critP}%</div>
+      </div>`;
+    })();
     const rows = sortedSubnets.map((s) => {
       const st = stats.find(x => x.id === s.id);
       const cap = capacityFromCidr(s.cidr);
@@ -225,8 +274,22 @@ export default function IpamPage() {
         <td>${cap}</td>
         <td>${used}</td>
         <td>${occ}%</td>
-        <td>${hl}</td>
-      </tr>`;
+       </tr>`;
+    }).join('');
+    const addressesSection = sortedSubnets.map((s) => {
+      const addrs = addrMap.get(s.id) || [];
+      if (!addrs.length) return '';
+      return `
+        <div class=\"section\">
+          <div class=\"subnet-title\">Endereços — ${s.name} <span class=\"muted\">(${s.cidr})</span></div>
+          <table class=\"zebra tight\">
+            <thead><tr><th>IP</th><th>Hostname</th></tr></thead>
+            <tbody>
+              ${addrs.map(a => `<tr><td>${a.address}</td><td>${a.hostname || ''}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
     }).join('');
     const html = `
       <!doctype html>
@@ -251,25 +314,38 @@ export default function IpamPage() {
                 <img src=\"/logo.svg\" class=\"logo\" alt=\"Tech Hub\" />
               </div>
             </div>
-            <h2>Introdução</h2>
-            <p>${intro}</p>
-            <h2>Resumo</h2>
-            <div class=\"cards\">
-              <div class=\"card\"><div class=\"big\">${subnets.length}</div><div class=\"muted\">Subnets</div></div>
-              <div class=\"card\"><div class=\"big\">${totalUsed}</div><div class=\"muted\">IPs usados</div></div>
-              <div class=\"card\"><div class=\"big\">${avgOcc}%</div><div class=\"muted\">Ocupação média</div></div>
+            <div class=\"section\">
+              <h2>1. Cabeçalho e Introdução</h2>
+              <p>${intro}</p>
             </div>
-            <h2>Top 10 por ocupação</h2>
-            <div class=\"chart\">${chartBars || '<div class=\"muted\">Sem dados.</div>'}</div>
-            <h2>Subnets</h2>
+            <div class=\"section\">
+              <h2>2. Resumo Geral</h2>
+              <div class=\"cards\">
+                <div class=\"card\"><div class=\"big\">${subnets.length}</div><div class=\"muted\">Subnets</div></div>
+                <div class=\"card\"><div class=\"big\">${totalUsed}</div><div class=\"muted\">IPs usados</div></div>
+                <div class=\"card\"><div class=\"big\">${avgOcc}%</div><div class=\"muted\">Ocupação média</div></div>
+              </div>
+              <h3 style=\"margin-top:12px\">Top 10 por ocupação</h3>
+              <div class=\"chart\">${chartBars || '<div class=\"muted\">Sem dados.</div>'}</div>
+              
+            </div>
+            <div class=\"page-break\"></div>
+            <div class=\"section\">
+              <h2>3. Subnets</h2>
             <table>
               <thead>
-                <tr><th>Subnet</th><th>CIDR</th><th>Site</th><th>VLAN</th><th>Capacidade</th><th>Usados</th><th>Ocupação</th><th>Saúde</th></tr>
+                <tr><th>Subnet</th><th>CIDR</th><th>Site</th><th>VLAN</th><th>Capacidade</th><th>Usados</th><th>Ocupação</th></tr>
               </thead>
               <tbody>
                 ${rows || `<tr><td colspan=\"8\">Nenhum subnet cadastrado.</td></tr>`}
               </tbody>
             </table>
+            </div>
+            <div class=\"page-break\"></div>
+            <div class=\"section\">
+              <h2>4. Endereços Cadastrados por Subnet</h2>
+              <div class=\"addresses-wrap\">${addressesSection || '<div class=\"muted\">Sem endereços cadastrados.</div>'}</div>
+            </div>
             <script>window.onload=function(){window.focus();setTimeout(function(){window.print();},300);};</script>
           </div>
         </body>
@@ -348,9 +424,7 @@ export default function IpamPage() {
   });
 
   async function startEditSubnet(s: Subnet) {
-    setEditingId(s.id);
-    setEditName(s.name);
-    setEditDescription(s.description || '');
+    router.push(`/ipam/subnets/${s.id}`);
   }
 
   async function saveEditSubnet() {
@@ -537,16 +611,12 @@ export default function IpamPage() {
                 <th className="py-2">Usados</th>
                 <th className="py-2">Ocupação</th>
                 <th className="py-2">Saúde</th>
-                <th className="py-2">Hosts esperados</th>
-                <th className="py-2">Máscara sugerida</th>
               </tr>
             </thead>
             <tbody>
               {stats.map((s) => {
                 const cap = capacityFromCidr(s.cidr);
                 const occ = occupancy(s.usageCount || 0, cap);
-                const exp = Number(expected[s.id] || '');
-                const mask = Number.isFinite(exp) && exp > 0 ? recommendMask(exp) : null;
                 return (
                   <tr key={s.id} className="border-b border-border">
                     <td className="py-2">{s.name} <span className="text-muted">({s.cidr})</span></td>
@@ -559,15 +629,6 @@ export default function IpamPage() {
                       <div className="text-xs text-muted mt-1">{occ}%</div>
                     </td>
                     <td className="py-2">{health(occ)}</td>
-                    <td className="py-2">
-                      <input
-                        value={expected[s.id] || ''}
-                        onChange={(e) => setExpected((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                        className="w-28 border border-border rounded px-2 py-1"
-                        placeholder="Ex.: 120"
-                      />
-                    </td>
-                    <td className="py-2">{mask !== null ? `/${mask}` : '-'}</td>
                   </tr>
                 );
               })}

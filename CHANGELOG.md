@@ -177,3 +177,25 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 ### Corrigido
 - Cálculo de matching de CIDR por inteiros (start/end) para faixas como `192.168.1.0/24` e semelhantes.
 - Respeito à ordenação escolhida na tela ao exportar CSV e PDF.
+
+## [0.3.8] — 2025-12-05
+
+### Adicionado
+- Licenciamento — Firewall: vínculo de licença a um IP já cadastrado no IPAM (`ipAddressId`) com validação de empresa/site.
+- Web: seleção de Subnet/IP no cadastro e edição de Firewall; envio de `ipAddressId` ao backend.
+- Licenciamento: novas páginas “Antivírus” e “Microsoft” com conteúdo inicial (“Em desenvolvimento”).
+- Sidebar: submenu “Licenciamento” dentro de Gestão com itens Firewall, Antivírus e Microsoft.
+- Web/API Proxy: rotas `/api/*` no Next encaminhando para o serviço `api` (melhor acesso em rede local).
+
+### Alterado
+- Integração Zabbix (web): URL pré-preenchida `https://zabbix.techmaster.inf.br` e `Prefixo` obrigatório com hint “CLIENTE/TECHUB”.
+- Dashboard: correções nas visualizações — deduplicação de firewalls por `serial`; “Top por ocupação” do IPAM deduplicado por nome+CIDR.
+- Acesso em rede: ajustes para que o frontend use `/api` como base, evitando dependência da porta 4000 externa.
+
+### Corrigido
+- Prisma: relação `FirewallLicense ↔ IpAddress` com lado oposto e nome de relação; sincronização do schema.
+- Compose (prod): limpeza de linha inválida, garantindo build/run estáveis.
+
+### Operacional
+- Rebuild de `web` e `api`; containers reiniciados; validação de acesso externo em `http://<host>:3000`.
+- Versões atualizadas: root e web `0.3.8`; api `0.2.1`.

@@ -20,6 +20,7 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
   const user = typeof window !== 'undefined' ? getUser() : null;
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editCidr, setEditCidr] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -33,7 +34,7 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
       }
       const s = await apiGet<Subnet>(`/ipam/subnets/${id}`, token);
       setSubnet(s || null);
-      if (s) { setEditName((s as any).name || ''); setEditDescription((s as any).cidr ? '' : ''); }
+      if (s) { setEditName((s as any).name || ''); setEditDescription((s as any).description || ''); setEditCidr((s as any).cidr || ''); }
       const a = await apiGet<Address[]>(`/ipam/addresses?subnetId=${id}`, token);
       setAddresses(Array.isArray(a) ? a : []);
     })();
@@ -59,7 +60,7 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
 
   const saveSubnet = async () => {
     if (!token) return;
-    await apiPut(`/ipam/subnets/${id}`, token, { name: editName, description: editDescription || undefined });
+    await apiPut(`/ipam/subnets/${id}`, token, { name: editName, cidr: editCidr, description: editDescription || undefined });
     const s = await apiGet<Subnet>(`/ipam/subnets/${id}`, token);
     setSubnet(s || null);
   };
@@ -72,7 +73,10 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-semibold mb-4">Subnet</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Subnet</h1>
+        <button onClick={() => router.back()} className="px-3 py-2 rounded bg-border text-text">Voltar</button>
+      </div>
       {subnet && (
         <div className="mb-4">
           <div className="text-lg">{subnet.name}</div>
@@ -82,6 +86,10 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
               <div>
                 <label className="block text-sm mb-1">Nome</label>
                 <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">CIDR</label>
+                <input value={editCidr} onChange={(e) => setEditCidr(e.target.value)} className="w-full border border-border rounded px-2 py-2" placeholder="Ex.: 192.168.1.0/24" />
               </div>
               <div>
                 <label className="block text-sm mb-1">Descrição</label>

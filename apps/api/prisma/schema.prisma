@@ -49,6 +49,7 @@ model Company {
   sites      Site[]
   vrfs       Vrf[]
   subnets    IpSubnet[]
+  firewallLicenses FirewallLicense[]
 }
 
 model UserCompanyMembership {
@@ -194,6 +195,7 @@ model Site {
 
   vlans     Vlan[]
   subnets   IpSubnet[]
+  firewallLicenses FirewallLicense[]
 
   @@unique([companyId, name])
 }
@@ -211,6 +213,29 @@ model Vlan {
   subnets   IpSubnet[]
 
   @@unique([siteId, number])
+}
+
+model FirewallLicense {
+  id          String   @id @default(uuid())
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  site        Site?    @relation(fields: [siteId], references: [id])
+  siteId      String?
+  ipAddress   IpAddress? @relation(name: "IpAddressFirewallLicenses", fields: [ipAddressId], references: [id])
+  ipAddressId String?
+  vendor      String
+  model       String
+  serial      String
+  licenseName String
+  expiresAt   DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([expiresAt])
+  @@index([ipAddressId])
 }
 
 model IpSubnet {
@@ -246,6 +271,8 @@ model IpAddress {
   status     IpAddressStatus @default(ASSIGNED)
   assignedTo String?
   createdAt  DateTime        @default(now())
+
+  firewallLicenses FirewallLicense[] @relation(name: "IpAddressFirewallLicenses")
 
   @@unique([subnetId, address])
 }

@@ -37,6 +37,7 @@ export class ZabbixController {
     if (!ctx.ok) return ctx;
     if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
     if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(body.companyId)) return { ok: false, error: 'Forbidden' };
+    if (!body.url || !body.token || !body.groupPrefix) return { ok: false, error: 'Prefixo, URL e Token são obrigatórios' };
     return this.service.setConfig(body.companyId, { url: body.url, token: body.token, groupPrefix: body.groupPrefix }, ctx.userId);
   }
 

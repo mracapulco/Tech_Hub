@@ -24,6 +24,24 @@ export class IpamService {
     return this.prisma.ipAddress.findMany({ where: { subnetId }, orderBy: { address: 'asc' } });
   }
 
+  async listAddressesByCompany(companyId: string, siteId?: string) {
+    const addrs = await this.prisma.ipAddress.findMany({
+      where: { subnet: { companyId, siteId: siteId || undefined } },
+      include: { subnet: { include: { site: true } } },
+      orderBy: { address: 'asc' },
+    });
+    return addrs.map((a: any) => ({
+      id: a.id,
+      address: a.address,
+      hostname: a.hostname,
+      subnetId: a.subnetId,
+      subnetName: a.subnet?.name ?? '',
+      cidr: a.subnet?.cidr ?? '',
+      siteId: a.subnet?.siteId ?? null,
+      siteName: a.subnet?.site?.name ?? null,
+    }));
+  }
+
   async listSubnetsWithStats(companyId: string, siteId?: string) {
     const subs = await this.prisma.ipSubnet.findMany({ where: { companyId, siteId: siteId || undefined }, orderBy: { name: 'asc' } });
     const ids = subs.map((s) => s.id);

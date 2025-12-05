@@ -39,13 +39,20 @@ export class VlansController {
   }
 
   @Get()
-  async list(@Query('siteId') siteId: string, @Headers('authorization') authorization?: string) {
+  async list(@Query('siteId') siteId: string, @Query('companyId') companyId: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getUserContext(authorization);
     if (!ctx.ok) return ctx;
-    const site = await this.prisma.site.findUnique({ where: { id: siteId } });
-    if (!site) return [];
-    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes((site as any).companyId)) return { ok: false, error: 'Forbidden' };
-    return this.service.list(siteId);
+    if (siteId) {
+      const site = await this.prisma.site.findUnique({ where: { id: siteId } });
+      if (!site) return [];
+      if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes((site as any).companyId)) return { ok: false, error: 'Forbidden' };
+      return this.service.list(siteId);
+    }
+    if (companyId) {
+      if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
+      return this.service.listByCompany(companyId);
+    }
+    return [];
   }
 
   @Post()

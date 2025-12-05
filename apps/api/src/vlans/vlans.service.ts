@@ -12,4 +12,8 @@ export class VlansService {
   create(data: { siteId: string; number: number; name: string; purpose?: string }) {
     return this.prisma.vlan.create({ data });
   }
+
+  listByCompany(companyId: string) {
+    return this.prisma.vlan.findMany({ where: { site: { companyId } }, orderBy: { number: 'asc' } });
+  }
 }
