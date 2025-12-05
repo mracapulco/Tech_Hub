@@ -5,7 +5,8 @@ const TARGET_BASE = process.env.INTERNAL_API_URL || 'http://api:3000';
 
 async function forward(req: NextRequest, ctx: { params: { path: string[] } }) {
   const path = (ctx.params?.path || []).join('/');
-  const url = `${TARGET_BASE}/${path}`;
+  const qs = req.nextUrl.search || '';
+  const url = `${TARGET_BASE}/${path}${qs}`;
   const headers: Record<string, string> = {};
   req.headers.forEach((v, k) => {
     if (k.toLowerCase() === 'host') return;

@@ -62,8 +62,9 @@ export class SitesController {
     if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
     const current = await this.prisma.site.findUnique({ where: { id } });
     if (!current) return { ok: false, error: 'Site não encontrado' };
-    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes((current as any).companyId)) return { ok: false, error: 'Forbidden' };
-    return this.prisma.site.update({ where: { id }, data: { name: body.name ?? (current as any).name, city: body.city ?? (current as any).city ?? null, state: body.state ?? (current as any).state ?? null } });
+    const targetCompanyId = body.companyId ?? (current as any).companyId;
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(targetCompanyId)) return { ok: false, error: 'Forbidden' };
+    return this.prisma.site.update({ where: { id }, data: { companyId: targetCompanyId, name: body.name ?? (current as any).name, city: body.city ?? (current as any).city ?? null, state: body.state ?? (current as any).state ?? null } });
   }
 
   @Delete(':id')

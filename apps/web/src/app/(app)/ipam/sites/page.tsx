@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { getToken, getUser } from '@/lib/auth';
 
 type Company = { id: string; name: string };
@@ -16,6 +16,11 @@ export default function SitesPage() {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [isAdminOrTech, setIsAdminOrTech] = useState(false);
+  const [editId, setEditId] = useState<string>('');
+  const [editName, setEditName] = useState<string>('');
+  const [editCity, setEditCity] = useState<string>('');
+  const [editState, setEditState] = useState<string>('');
+  const [editCompanyId, setEditCompanyId] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -48,6 +53,31 @@ export default function SitesPage() {
       const res = await apiGet<Site[]>(`/sites?companyId=${companyId}`, token);
       if (Array.isArray(res)) setSites(res);
     }
+  };
+
+  const startEdit = (s: Site) => {
+    setEditId(s.id);
+    setEditName(s.name || '');
+    setEditCity(s.city || '');
+    setEditState(s.state || '');
+    setEditCompanyId(companyId);
+  };
+
+  const saveEdit = async () => {
+    if (!token || !editId) return;
+    await apiPut(`/sites/${editId}`, token, { companyId: editCompanyId || companyId, name: editName || undefined, city: editCity || undefined, state: editState || undefined });
+    setEditId(''); setEditName(''); setEditCity(''); setEditState('');
+    const res = await apiGet<Site[]>(`/sites?companyId=${companyId}`, token);
+    if (Array.isArray(res)) setSites(res);
+  };
+
+  const cancelEdit = () => { setEditId(''); setEditName(''); setEditCity(''); setEditState(''); };
+
+  const removeSite = async (id: string) => {
+    if (!token) return;
+    await apiDelete(`/sites/${id}`, token);
+    const res = await apiGet<Site[]>(`/sites?companyId=${companyId}`, token);
+    if (Array.isArray(res)) setSites(res);
   };
 
   return (
@@ -87,8 +117,43 @@ export default function SitesPage() {
             <ul className="space-y-2">
               {sites.map((s) => (
                 <li key={s.id} className="border border-border rounded p-2">
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-sm text-muted">{[s.city, s.state].filter(Boolean).join(' - ')}</div>
+                  {editId === s.id ? (
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                      <div>
+                        <label className="block text-xs mb-1">Empresa</label>
+                        <select value={editCompanyId} onChange={(e) => setEditCompanyId(e.target.value)} className="w-full border border-border rounded px-2 py-1 text-sm">
+                          {companies.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs mb-1">Nome</label>
+                        <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full border border-border rounded px-2 py-1 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs mb-1">Cidade</label>
+                        <input value={editCity} onChange={(e) => setEditCity(e.target.value)} className="w-full border border-border rounded px-2 py-1 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs mb-1">Estado</label>
+                        <input value={editState} onChange={(e) => setEditState(e.target.value)} className="w-full border border-border rounded px-2 py-1 text-sm" />
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <button onClick={saveEdit} className="px-3 py-1 bg-primary text-white rounded text-sm">Salvar</button>
+                        <button onClick={cancelEdit} className="px-3 py-1 bg-border text-text rounded text-sm">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="font-medium">{s.name}</div>
+                      <div className="text-sm text-muted">{[s.city, s.state].filter(Boolean).join(' - ')}</div>
+                      {isAdminOrTech && (
+                        <div className="mt-2 flex gap-2">
+                          <button onClick={() => startEdit(s)} className="px-3 py-1 bg-primary text-white rounded text-xs">Editar</button>
+                          <button onClick={() => removeSite(s.id)} className="px-3 py-1 bg-red-600 text-white rounded text-xs">Excluir</button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

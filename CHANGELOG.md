@@ -199,3 +199,16 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 ### Operacional
 - Rebuild de `web` e `api`; containers reiniciados; validação de acesso externo em `http://<host>:3000`.
 - Versões atualizadas: root e web `0.3.8`; api `0.2.1`.
+
+## [0.3.9] — 2025-12-05
+
+### Corrigido
+- Proxy `/api/*` do frontend agora preserva query string (`?companyId=...`, `?siteId=...`), garantindo filtros de empresa/site em Sites, Subnets e Zabbix.
+- IPAM (edição de subnet): campo “Site” adicionado para vincular subnets corretamente.
+- IPAM (Sites): edição inclui “Empresa”; backend aceita mover sites entre empresas com validação de permissões.
+
+### Alterado
+- Passo de rebuild validado para execução em rede local com proxy `/api`.
+
+### Operacional
+- Rebuild do `web` e restart dos containers; validações funcionais em IPAM → Sites/Subnets e Dashboard.

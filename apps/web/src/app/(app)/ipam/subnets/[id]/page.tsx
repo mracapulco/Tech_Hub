@@ -4,7 +4,8 @@ import { apiGet, apiPost, apiDelete, apiPut } from '@/lib/api';
 import { getToken, getUser } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
-type Subnet = { id: string; name: string; cidr: string };
+type Subnet = { id: string; name: string; cidr: string; description?: string | null; companyId: string; siteId?: string | null };
+type Site = { id: string; name: string };
 type Address = { subnetId: string; address: string; hostname?: string | null; status?: 'ASSIGNED' | 'RESERVED' };
 
 export default function SubnetDetail({ params }: { params: { id: string } }) {
@@ -21,6 +22,8 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editCidr, setEditCidr] = useState('');
+  const [sites, setSites] = useState<Site[]>([]);
+  const [editSiteId, setEditSiteId] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -34,7 +37,16 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
       }
       const s = await apiGet<Subnet>(`/ipam/subnets/${id}`, token);
       setSubnet(s || null);
-      if (s) { setEditName((s as any).name || ''); setEditDescription((s as any).description || ''); setEditCidr((s as any).cidr || ''); }
+      if (s) {
+        setEditName((s as any).name || '');
+        setEditDescription((s as any).description || '');
+        setEditCidr((s as any).cidr || '');
+        setEditSiteId((s as any).siteId || '');
+        try {
+          const siteList = await apiGet<Site[]>(`/sites?companyId=${(s as any).companyId}`, token);
+          if (Array.isArray(siteList)) setSites(siteList);
+        } catch {}
+      }
       const a = await apiGet<Address[]>(`/ipam/addresses?subnetId=${id}`, token);
       setAddresses(Array.isArray(a) ? a : []);
     })();
@@ -60,7 +72,7 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
 
   const saveSubnet = async () => {
     if (!token) return;
-    await apiPut(`/ipam/subnets/${id}`, token, { name: editName, cidr: editCidr, description: editDescription || undefined });
+    await apiPut(`/ipam/subnets/${id}`, token, { name: editName, cidr: editCidr, description: editDescription || undefined, siteId: editSiteId || undefined });
     const s = await apiGet<Subnet>(`/ipam/subnets/${id}`, token);
     setSubnet(s || null);
   };
@@ -90,6 +102,13 @@ export default function SubnetDetail({ params }: { params: { id: string } }) {
               <div>
                 <label className="block text-sm mb-1">CIDR</label>
                 <input value={editCidr} onChange={(e) => setEditCidr(e.target.value)} className="w-full border border-border rounded px-2 py-2" placeholder="Ex.: 192.168.1.0/24" />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Site</label>
+                <select value={editSiteId} onChange={(e) => setEditSiteId(e.target.value)} className="w-full border border-border rounded px-2 py-2">
+                  <option value="">Sem site</option>
+                  {sites.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm mb-1">Descrição</label>
