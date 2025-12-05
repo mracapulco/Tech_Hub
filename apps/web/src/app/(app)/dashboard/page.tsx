@@ -97,7 +97,7 @@ export default function DashboardPage() {
           setIpamTotals({ subnets: totalSubnets, used: totalUsed, capacity: totalCapacity, occupancy: occAvg });
           setZabbixConfigured(zCfg);
           fwList.sort((a, b) => a.days - b.days);
-          setUpcomingFw(fwList.filter((x) => x.days >= 0).slice(0, 10));
+          setUpcomingFw(fwList.slice(0, 10));
         } catch {}
       })
       .catch(() => setError("Falha ao comunicar com a API."))

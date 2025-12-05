@@ -212,3 +212,11 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Operacional
 - Rebuild do `web` e restart dos containers; validações funcionais em IPAM → Sites/Subnets e Dashboard.
+
+## [0.3.10] — 2025-12-05
+
+### Corrigido
+- Dashboard — “Firewall — próximos a expirar”: inclui itens já vencidos (dias negativos) e ordena com vencidos no topo.
+
+### Operacional
+- Versões atualizadas: root e web `0.3.10`.
