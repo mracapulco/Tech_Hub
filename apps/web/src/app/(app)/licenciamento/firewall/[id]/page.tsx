@@ -4,7 +4,7 @@ import { apiGet, apiPut } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
-type Lic = { id: string; companyId: string; siteId?: string | null; ipAddressId?: string | null; vendor: string; model: string; serial: string; licenseName: string; expiresAt: string; notes?: string | null };
+type Lic = { id: string; companyId: string; siteId?: string | null; ipAddressId?: string | null; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string | null; expiresAt: string; notes?: string | null };
 type Site = { id: string; name: string };
 type IpAddr = { id: string; address: string; hostname?: string | null; subnetName?: string; cidr?: string };
 
@@ -17,6 +17,7 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
   const [model, setModel] = useState('');
   const [serial, setSerial] = useState('');
   const [licenseName, setLicenseName] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [notes, setNotes] = useState('');
   const [sites, setSites] = useState<Site[]>([]);
@@ -34,6 +35,7 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
         setModel(l.model || '');
         setSerial(l.serial || '');
         setLicenseName(l.licenseName || '');
+        setLicenseNumber((l as any).licenseNumber || '');
         setExpiresAt(l.expiresAt ? l.expiresAt.substring(0,10) : '');
         setNotes(l.notes || '');
         setSiteId(l.siteId || '');
@@ -57,7 +59,7 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
 
   const save = async () => {
     if (!token || !lic) return;
-    await apiPut(`/licensing/firewall/${lic.id}`, token, { vendor, model, serial, licenseName, expiresAt, notes: notes || undefined, siteId: siteId || undefined, ipAddressId: ipAddressId || null });
+    await apiPut(`/licensing/firewall/${lic.id}`, token, { vendor, model, serial, licenseName, licenseNumber: licenseNumber || undefined, expiresAt, notes: notes || undefined, siteId: siteId || undefined, ipAddressId: ipAddressId || null });
     router.back();
   };
 
@@ -94,8 +96,12 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
               </select>
             </div>
             <div className="mb-3">
-              <label className="block text-sm mb-1">Licença</label>
+              <label className="block text-sm mb-1">Tipo da licença</label>
               <input value={licenseName} onChange={(e) => setLicenseName(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
+            </div>
+            <div className="mb-3">
+              <label className="block text-sm mb-1">Número da licença</label>
+              <input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
             </div>
             <div className="mb-3">
               <label className="block text-sm mb-1">Vencimento</label>

@@ -5,7 +5,7 @@ import { getToken, getUser } from '@/lib/auth';
 
 type Company = { id: string; name: string };
 type Site = { id: string; name: string };
-type Lic = { id: string; companyId: string; siteId?: string | null; ipAddressId?: string | null; vendor: string; model: string; serial: string; licenseName: string; expiresAt: string; notes?: string | null };
+type Lic = { id: string; companyId: string; siteId?: string | null; ipAddressId?: string | null; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string | null; expiresAt: string; notes?: string | null };
 type Brand = { id: string; name: string };
 type IpAddr = { id: string; address: string; hostname?: string | null; subnetName?: string; cidr?: string };
 
@@ -23,6 +23,7 @@ export default function FirewallLicPage() {
   const [model, setModel] = useState('');
   const [serial, setSerial] = useState('');
   const [licenseName, setLicenseName] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [notes, setNotes] = useState('');
   const [isAdminOrTech, setIsAdminOrTech] = useState(false);
@@ -67,8 +68,8 @@ export default function FirewallLicPage() {
 
   const createLic = async () => {
     if (!token || !companyId || !model || !serial || !licenseName || !expiresAt) return;
-    await apiPost(`/licensing/firewall`, token, { companyId, siteId: siteId || undefined, vendor, model, serial, licenseName, expiresAt, notes: notes || undefined, ipAddressId: ipAddressId || undefined });
-    setModel(''); setSerial(''); setLicenseName(''); setExpiresAt(''); setNotes('');
+    await apiPost(`/licensing/firewall`, token, { companyId, siteId: siteId || undefined, vendor, model, serial, licenseName, licenseNumber: licenseNumber || undefined, expiresAt, notes: notes || undefined, ipAddressId: ipAddressId || undefined });
+    setModel(''); setSerial(''); setLicenseName(''); setLicenseNumber(''); setExpiresAt(''); setNotes('');
     const l = await apiGet<Lic[]>(`/licensing/firewall?companyId=${companyId}${siteId ? `&siteId=${siteId}` : ''}`, token);
     if (Array.isArray(l)) setList(l);
     setAddresses([]); setIpAddressId('');
@@ -131,8 +132,12 @@ export default function FirewallLicPage() {
                 <input value={serial} onChange={(e) => setSerial(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
               </div>
               <div className="mb-3">
-                <label className="block text-sm mb-1">Licença</label>
+                <label className="block text-sm mb-1">Tipo da licença</label>
                 <input value={licenseName} onChange={(e) => setLicenseName(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm mb-1">Número da licença</label>
+                <input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
               </div>
               <div className="mb-3">
                 <label className="block text-sm mb-1">Vencimento</label>
@@ -158,7 +163,7 @@ export default function FirewallLicPage() {
                   <th className="py-2">Fornecedor</th>
                   <th className="py-2">Modelo</th>
                   <th className="py-2">Serial</th>
-                  <th className="py-2">Licença</th>
+                  <th className="py-2">Tipo da licença</th>
                   <th className="py-2">Vencimento</th>
                   <th className="py-2">Dias</th>
                   {isAdminOrTech && <th className="py-2">Ações</th>}

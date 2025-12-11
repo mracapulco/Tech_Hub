@@ -227,6 +227,7 @@ model FirewallLicense {
   model       String
   serial      String
   licenseName String
+  licenseNumber String?
   expiresAt   DateTime
   notes       String?
   createdAt   DateTime @default(now())

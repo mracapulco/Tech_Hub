@@ -17,7 +17,7 @@ export class FirewallService {
     return this.prisma.firewallLicense.findUnique({ where: { id } });
   }
 
-  async create(data: { companyId: string; siteId?: string; vendor: string; model: string; serial: string; licenseName: string; expiresAt: string; notes?: string; ipAddressId?: string }) {
+  async create(data: { companyId: string; siteId?: string; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string; expiresAt: string; notes?: string; ipAddressId?: string }) {
     const payload: any = { ...data, expiresAt: new Date(data.expiresAt) };
     if (payload.ipAddressId) {
       const ip = await this.prisma.ipAddress.findUnique({ where: { id: payload.ipAddressId }, include: { subnet: true } });
@@ -30,7 +30,7 @@ export class FirewallService {
     return this.prisma.firewallLicense.create({ data: payload });
   }
 
-  async update(id: string, data: Partial<{ vendor: string; model: string; serial: string; licenseName: string; expiresAt: string; notes?: string; siteId?: string; ipAddressId?: string | null }>) {
+  async update(id: string, data: Partial<{ vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string; expiresAt: string; notes?: string; siteId?: string; ipAddressId?: string | null }>) {
     const current = await this.prisma.firewallLicense.findUnique({ where: { id } });
     if (!current) throw new Error('Registro não encontrado');
     const payload: any = { ...data };

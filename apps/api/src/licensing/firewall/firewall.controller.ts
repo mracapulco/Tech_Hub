@@ -56,7 +56,7 @@ export class FirewallController {
   }
 
   @Post()
-  async create(@Body() body: { companyId: string; siteId?: string; vendor: string; model: string; serial: string; licenseName: string; expiresAt: string; notes?: string; ipAddressId?: string }, @Headers('authorization') authorization?: string) {
+  async create(@Body() body: { companyId: string; siteId?: string; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string; expiresAt: string; notes?: string; ipAddressId?: string }, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };

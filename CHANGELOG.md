@@ -228,3 +228,14 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Operacional
 - Versões atualizadas: root e web `0.3.11`.
+
+## [0.3.12] — 2025-12-11
+
+### Adicionado
+- Licenciamento — Firewall: campo “Número da licença” e rótulo “Tipo da licença”.
+
+### Corrigido
+- Licenciamento — Firewall (lista/cadastro/edição): rótulos e persistência de `licenseNumber` em API e UI.
+
+### Operacional
+- Rebuild do `web` e restart de containers.

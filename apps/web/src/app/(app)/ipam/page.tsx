@@ -526,7 +526,7 @@ export default function IpamPage() {
           {isAdminOrTech && (
           <div className="mb-3">
             <label className="block text-sm mb-1">VLAN</label>
-            <select value={vlanId} onChange={(e) => setVlanId(e.target.value)} className="w-full border border-border rounded px-2 py-2">
+            <select value={vlanId} onChange={(e) => { const id = e.target.value; setVlanId(id); const v = vlans.find((x) => x.id === id); if (v) { setName(v.name ? `VLAN ${v.number} — ${v.name}` : `VLAN ${v.number}`); setDescription(v.purpose || ''); } }} className="w-full border border-border rounded px-2 py-2">
               <option value="">Opcional</option>
               {vlans.map((v) => (
                 <option key={v.id} value={v.id}>VLAN {v.number} — {v.name}</option>
