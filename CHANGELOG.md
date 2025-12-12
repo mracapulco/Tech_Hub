@@ -252,3 +252,12 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Operacional
 - Versões atualizadas: root e web `0.3.13`; api `0.2.3`.
+
+## [0.3.14] — 2025-12-12
+
+### Corrigido
+- Proxy `/api/*` passa a responder como stream, preservando arquivos binários (PDF) e seus headers.
+- Visualização de PDF em Licenciamento — Firewall passa a funcionar no iframe e no link de nova aba.
+
+### Operacional
+- Versões atualizadas: root e web `0.3.14`.
