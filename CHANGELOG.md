@@ -239,3 +239,16 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Operacional
 - Rebuild do `web` e restart de containers.
+
+## [0.3.13] — 2025-12-12
+
+### Adicionado
+- Licenciamento — Firewall: upload de PDF da licença (somente `application/pdf`).
+- Licenciamento — Firewall (edição): painel lateral com visualização do PDF e link para abrir em nova aba.
+- Licenciamento — Firewall (lista): coluna "Anexo" com indicador 📎 ✓ quando houver PDF e botão "Visualizar".
+
+### Corrigido
+- Funções de upload movidas para dentro dos componentes com acesso ao `token`.
+
+### Operacional
+- Versões atualizadas: root e web `0.3.13`; api `0.2.3`.

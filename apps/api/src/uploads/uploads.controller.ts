@@ -35,4 +35,28 @@ export class UploadsController {
     const path = `/uploads/${file.filename}`;
     return { ok: true, path };
   }
+
+  @Post('pdf')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (_req, file, cb) => {
+          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, unique + extname(file.originalname || ''));
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (String(file.mimetype).toLowerCase() === 'application/pdf') cb(null, true);
+        else cb(new Error('Only PDF allowed'), false);
+      },
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async uploadPdf(@UploadedFile() file: Express.Multer.File | undefined, @Headers('authorization') authorization?: string) {
+    if (!verifyBearer(authorization)) return { ok: false, error: 'Unauthorized' };
+    if (!file) return { ok: false, error: 'No file uploaded' };
+    const path = `/uploads/${file.filename}`;
+    return { ok: true, path };
+  }
 }

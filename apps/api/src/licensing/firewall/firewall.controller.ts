@@ -41,6 +41,9 @@ export class FirewallController {
       if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes((site as any).companyId)) return { ok: false, error: 'Forbidden' };
       return this.service.listBySite(siteId);
     }
+    if (!companyId) {
+      return this.service.listByCompanies(ctx.allowedCompanyIds);
+    }
     if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
     return this.service.listByCompany(companyId);
   }
@@ -56,7 +59,7 @@ export class FirewallController {
   }
 
   @Post()
-  async create(@Body() body: { companyId: string; siteId?: string; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string; expiresAt: string; notes?: string; ipAddressId?: string }, @Headers('authorization') authorization?: string) {
+  async create(@Body() body: { companyId: string; siteId?: string; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string; licenseFileUrl?: string; expiresAt: string; notes?: string; ipAddressId?: string }, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };

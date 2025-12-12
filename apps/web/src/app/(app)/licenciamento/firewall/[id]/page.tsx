@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { apiGet, apiPut } from '@/lib/api';
+import { apiGet, apiPut, apiUpload } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
 type Lic = { id: string; companyId: string; siteId?: string | null; ipAddressId?: string | null; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string | null; expiresAt: string; notes?: string | null };
+type UploadResp = { ok: boolean; path?: string };
 type Site = { id: string; name: string };
 type IpAddr = { id: string; address: string; hostname?: string | null; subnetName?: string; cidr?: string };
 
@@ -18,6 +19,8 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
   const [serial, setSerial] = useState('');
   const [licenseName, setLicenseName] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
+  const [licenseFileUrl, setLicenseFileUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [notes, setNotes] = useState('');
   const [sites, setSites] = useState<Site[]>([]);
@@ -36,6 +39,7 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
         setSerial(l.serial || '');
         setLicenseName(l.licenseName || '');
         setLicenseNumber((l as any).licenseNumber || '');
+        setLicenseFileUrl((l as any).licenseFileUrl || '');
         setExpiresAt(l.expiresAt ? l.expiresAt.substring(0,10) : '');
         setNotes(l.notes || '');
         setSiteId(l.siteId || '');
@@ -59,8 +63,18 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
 
   const save = async () => {
     if (!token || !lic) return;
-    await apiPut(`/licensing/firewall/${lic.id}`, token, { vendor, model, serial, licenseName, licenseNumber: licenseNumber || undefined, expiresAt, notes: notes || undefined, siteId: siteId || undefined, ipAddressId: ipAddressId || null });
+    await apiPut(`/licensing/firewall/${lic.id}`, token, { vendor, model, serial, licenseName, licenseNumber: licenseNumber || undefined, licenseFileUrl: licenseFileUrl || undefined, expiresAt, notes: notes || undefined, siteId: siteId || undefined, ipAddressId: ipAddressId || null });
     router.back();
+  };
+
+  const onUploadPdf = async (file?: File) => {
+    if (!token || !file) return;
+    if (file.type.toLowerCase() !== 'application/pdf') { alert('Envie apenas PDF.'); return; }
+    setUploading(true);
+    try {
+      const res = await apiUpload('/uploads/pdf', token, file) as UploadResp;
+      if (res?.ok && res.path) setLicenseFileUrl(res.path);
+    } finally { setUploading(false); }
   };
 
   return (
@@ -104,6 +118,14 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
               <input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
             </div>
             <div className="mb-3">
+              <label className="block text-sm mb-1">PDF da licença</label>
+              <input type="file" accept="application/pdf" onChange={(e) => onUploadPdf(e.target.files?.[0])} className="w-full" />
+              {licenseFileUrl && (
+                <div className="text-xs mt-1"><a href={`${process.env.NEXT_PUBLIC_API_URL}${licenseFileUrl}`} target="_blank" rel="noreferrer" className="text-primary underline">Abrir PDF</a></div>
+              )}
+              {uploading && <div className="text-xs text-muted mt-1">Enviando...</div>}
+            </div>
+            <div className="mb-3">
               <label className="block text-sm mb-1">Vencimento</label>
               <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
             </div>
@@ -119,6 +141,21 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
               <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-border rounded px-2 py-2" />
             </div>
             <button onClick={save} className="px-4 py-2 bg-primary text-white rounded">Salvar</button>
+          </div>
+          <div className="md:col-span-2 bg-card border border-border rounded p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">Anexo da licença (PDF)</h2>
+              {licenseFileUrl && (
+                <a href={`${process.env.NEXT_PUBLIC_API_URL}${licenseFileUrl}`} target="_blank" rel="noreferrer" className="text-primary underline">Abrir em nova aba</a>
+              )}
+            </div>
+            {!licenseFileUrl ? (
+              <div className="text-sm text-muted">Nenhum PDF anexado.</div>
+            ) : (
+              <div className="border border-border rounded overflow-hidden">
+                <iframe src={`${process.env.NEXT_PUBLIC_API_URL}${licenseFileUrl}`} title="Licença PDF" className="w-full" style={{ height: 600 }} />
+              </div>
+            )}
           </div>
         </div>
       )}
