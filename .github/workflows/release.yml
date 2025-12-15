@@ -1,0 +1,31 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Extract changelog section
+        id: changelog
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          awk -v tag="$TAG" '
+            $0 ~ ("## \\[" tag "\\]") {found=1; print; next}
+            found && $0 ~ /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release notes for ${TAG} not found in CHANGELOG.md." > RELEASE_NOTES.md
+          fi
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
