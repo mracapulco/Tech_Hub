@@ -40,7 +40,8 @@ export default function FirewallLicPage() {
         try {
           const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (res?.data?.memberships || []) as { role: string }[];
-          setIsAdminOrTech(memberships.some((m) => m.role === 'ADMIN' || m.role === 'TECHNICIAN'));
+          const isGlobalAdmin = !!res?.data?.isGlobalAdmin;
+          setIsAdminOrTech(isGlobalAdmin || memberships.some((m) => m.role === 'ADMIN' || m.role === 'TECHNICIAN'));
         } catch {}
       }
       const comps = await apiGet<{ ok: boolean; data: any[] }>(`/companies`, token);
@@ -228,12 +229,8 @@ export default function FirewallLicPage() {
                       <td className="py-2">{l.licenseFileUrl ? <span title="PDF anexado">📎 ✓</span> : '—'}</td>
                       {isAdminOrTech && (
                         <td className="py-2 space-x-2">
-                          {l.licenseFileUrl ? (
-                            <a href={`${process.env.NEXT_PUBLIC_API_URL}${l.licenseFileUrl}`} target="_blank" rel="noreferrer" className="px-2 py-1 bg-border text-text rounded">Visualizar</a>
-                          ) : (
-                            <span className="px-2 py-1 bg-border text-muted rounded">Visualizar</span>
-                          )}
-                          <a href={`/licenciamento/firewall/${l.id}`} className="px-2 py-1 bg-primary text-white rounded">Editar</a>
+                          <a href={`/licenciamento/firewall/${l.id}`} className="px-2 py-1 bg-border text-text rounded">Visualizar</a>
+                          <a href={`/licenciamento/firewall/${l.id}/editar`} className="px-2 py-1 bg-primary text-white rounded">Editar</a>
                           <button onClick={() => removeLic(l.id)} className="px-2 py-1 bg-red-600 text-white rounded">Excluir</button>
                         </td>
                       )}

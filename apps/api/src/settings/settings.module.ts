@@ -8,7 +8,7 @@ import { SettingsController } from './settings.controller';
   imports: [
     JwtModule.register({
       global: false,
-      secret: process.env.JWT_SECRET || 'changeme',
+      secret: process.env.JWT_SECRET || 'dev-secret',
       signOptions: { expiresIn: '7d' },
     }),
   ],

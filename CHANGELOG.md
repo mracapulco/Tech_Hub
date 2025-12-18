@@ -4,6 +4,31 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.15] — 2025-12-18
+
+### Adicionado
+- Licenciamento — Firewall:
+  - Tela “Visualizar” com resumo gerencial e anexo embutido.
+  - Exportação PDF com cabeçalho padrão do Tech Hub e inclusão do PDF da licença em página separada.
+  - Tela “Editar” com feedback visual de sucesso/erro e upload de PDF.
+- Admin Global:
+  - Reconhecimento de `GLOBAL_ADMINS`/`NEXT_PUBLIC_GLOBAL_ADMINS` em API e Web.
+  - CRUD liberado sem vínculo para IPAM (Sites, VLANs, Subnets, Endereços), Dispositivos, Marcas e Tipos.
+
+### Alterado
+- Empresas: admin global lista todas as empresas sem precisar de membership.
+- IPAM e Configurações: botões de criar/editar/excluir habilitados para admin global.
+- Login (Web): base de API corrigida (evita erro de rede) e fallback estável.
+- Exportação (Firewall): utilização da `public/logo.svg` como logo do Tech Hub.
+
+### Corrigido
+- Permissões entre API/Web consistentes (admin/técnico vs clientes).
+- Consolidação de empresas duplicadas e migração de vínculos dependentes.
+
+### Operacional
+- `.gitignore` mantém `.env` e uploads fora de versionamento.
+- Containers reconstruídos (`web`, `api`) com variáveis de ambiente definidas.
+
 ## [0.3.6] — 2025-12-02
 
 ### Adicionado

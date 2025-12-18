@@ -31,7 +31,8 @@ export default function VlansPage() {
         try {
           const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (res?.data?.memberships || []) as { role: string }[];
-          setIsAdminOrTech(memberships.some((m) => m.role === 'ADMIN' || m.role === 'TECHNICIAN'));
+          const isGlobalAdmin = !!res?.data?.isGlobalAdmin;
+          setIsAdminOrTech(isGlobalAdmin || memberships.some((m) => m.role === 'ADMIN' || m.role === 'TECHNICIAN'));
         } catch { setIsAdminOrTech(false); }
       }
       const res = await apiGet<{ ok: boolean; data: any[] }>(`/companies`, token);

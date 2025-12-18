@@ -24,6 +24,7 @@ services:
       DATABASE_URL: postgres://techhub:techhub_password@db:5432/techhub
       JWT_SECRET: dev_secret_change_me
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY}
+      GLOBAL_ADMINS: ${GLOBAL_ADMINS}
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -39,10 +40,12 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_GLOBAL_ADMINS: ${NEXT_PUBLIC_GLOBAL_ADMINS}
     container_name: techhub-web
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_GLOBAL_ADMINS: ${NEXT_PUBLIC_GLOBAL_ADMINS}
     ports:
       - "3000:3000"
     networks:

@@ -91,7 +91,10 @@ export class DevicesController {
       const userId: string | null = payload?.sub ?? null;
       if (!userId) return { ok: false, error: 'Invalid token' };
       const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+      const username = String(payload?.username || '').toLowerCase();
+      const isGlobalAdmin = globalAdmins.includes(username);
+      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
       if (!isAdmin) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
@@ -134,7 +137,10 @@ export class DevicesController {
       const userId: string | null = payload?.sub ?? null;
       if (!userId) return { ok: false, error: 'Invalid token' };
       const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+      const username = String(payload?.username || '').toLowerCase();
+      const isGlobalAdmin = globalAdmins.includes(username);
+      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
       if (!isAdmin) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
@@ -173,7 +179,10 @@ export class DevicesController {
       const userId: string | null = payload?.sub ?? null;
       if (!userId) return { ok: false, error: 'Invalid token' };
       const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+      const username = String(payload?.username || '').toLowerCase();
+      const isGlobalAdmin = globalAdmins.includes(username);
+      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
       if (!isAdmin) return { ok: false, error: 'Forbidden' };
     } catch (e) {
       return { ok: false, error: 'Invalid token' };
