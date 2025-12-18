@@ -13,6 +13,15 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
   const [lic, setLic] = useState<Lic | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [addresses, setAddresses] = useState<IpAddr[]>([]);
+  const [companyLogo, setCompanyLogo] = useState<string>('');
+  const [companyName, setCompanyName] = useState<string>('');
+
+  function imgUrl(u?: string | null) {
+    if (!u) return '';
+    if (u.startsWith('http')) return u;
+    if (u.startsWith('/uploads')) return `${process.env.NEXT_PUBLIC_API_URL}${u}`;
+    return u;
+  }
 
   useEffect(() => {
     (async () => {
@@ -24,6 +33,13 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
         if (Array.isArray(s)) setSites(s);
         const addrs = await apiGet<any[]>(`/ipam/addresses-by-company?companyId=${(licData as any).companyId}${(licData as any).siteId ? `&siteId=${(licData as any).siteId}` : ''}`, token);
         setAddresses((addrs || []).map((a: any) => ({ id: a.id, address: a.address, hostname: a.hostname, subnetName: a.subnetName, cidr: a.cidr })));
+        try {
+          const comp = await apiGet<{ ok: boolean; data?: any }>(`/companies/${(licData as any).companyId}`, token);
+          if (comp?.ok && comp.data) {
+            setCompanyLogo(imgUrl(comp.data.logoUrl || ''));
+            setCompanyName(comp.data.name || '');
+          }
+        } catch {}
       }
     })();
   }, [token, id]);
@@ -34,6 +50,8 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
     const ipInfo = lic.ipAddressId ? addresses.find(a => a.id === lic.ipAddressId) : undefined;
     const now = new Date().toLocaleString();
     const API_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || location.origin;
+    const cmpLogo = companyLogo || '';
+    const cmpName = companyName || '';
     const html = `
       <html>
         <head>
@@ -84,9 +102,11 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
                   <div class="muted">Número ${lic.licenseNumber || '—'}</div>
                   <div class="muted">Vencimento ${new Date(lic.expiresAt).toLocaleDateString()}</div>
                 </div>
-                <div class="card">
-                  <div class="muted">Anexo</div>
-                  <div>${lic.licenseFileUrl ? '<a class="btn" href="' + API_BASE + lic.licenseFileUrl + '" target="_blank">Abrir PDF</a>' : 'Nenhum anexo'}</div>
+                <div class="card" style="display:flex;align-items:center;justify-content:center;gap:8px">
+                  <div style="width:100%">
+                    <div class="muted">Empresa ${cmpName ? '— ' + cmpName : ''}</div>
+                    ${cmpLogo ? '<img src="' + cmpLogo + '" alt="Logo da empresa" style="max-height:56px;object-fit:contain;margin-top:6px" />' : '<div style="height:56px;border:1px solid #e5e7eb;border-radius:8px;background:#f3f4f6"></div>'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -161,6 +181,16 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
                       <div className="text-sm font-medium">{lic.licenseName || '—'}</div>
                       <div className="text-xs text-muted">Número {lic.licenseNumber || '—'}</div>
                       <div className="text-xs text-muted mt-1">Vencimento {new Date(lic.expiresAt).toLocaleDateString()}</div>
+                    </div>
+                    <div className="border border-border rounded p-3 flex items-center justify-center">
+                      <div className="text-xs text-muted mb-2 w-full">Empresa {companyName ? `— ${companyName}` : ''}</div>
+                      {companyLogo ? (
+                        <div className="w-full flex items-center justify-center">
+                          <img src={companyLogo} alt={companyName || 'Logo'} className="max-h-14 object-contain" />
+                        </div>
+                      ) : (
+                        <div className="w-full h-14 border border-border rounded bg-muted" />
+                      )}
                     </div>
                     <div className="border border-border rounded p-3">
                       <div className="text-xs text-muted mb-1">Status</div>

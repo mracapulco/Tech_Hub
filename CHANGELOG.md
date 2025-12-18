@@ -19,7 +19,7 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 - Empresas: admin global lista todas as empresas sem precisar de membership.
 - IPAM e Configurações: botões de criar/editar/excluir habilitados para admin global.
 - Login (Web): base de API corrigida (evita erro de rede) e fallback estável.
-- Exportação (Firewall): utilização da `public/logo.svg` como logo do Tech Hub.
+- Exportação (Firewall): utilização da `public/logo.svg` como logo do Tech Hub; card ajustado para exibir logo da empresa e remoção de botão redundante de anexo.
 
 ### Corrigido
 - Permissões entre API/Web consistentes (admin/técnico vs clientes).
