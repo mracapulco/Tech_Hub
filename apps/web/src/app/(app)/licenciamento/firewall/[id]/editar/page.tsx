@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { apiGet, apiPut, apiDelete, apiUpload } from '@/lib/api';
+import { apiGet, apiPut, apiDelete, apiUpload, apiPost } from '@/lib/api';
 import { getToken, getUser } from '@/lib/auth';
 
 type Lic = { id: string; companyId: string; siteId?: string | null; ipAddressId?: string | null; vendor: string; model: string; serial: string; licenseName: string; licenseNumber?: string | null; licenseFileUrl?: string | null; expiresAt: string; notes?: string | null };
@@ -32,6 +32,7 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
   const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -188,7 +189,35 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
               <label className="block text-sm mb-1">PDF da licença</label>
               <input type="file" accept="application/pdf" onChange={(e) => onUploadPdf(e.target.files?.[0])} className="w-full" />
               {licenseFileUrl && (
-                <div className="text-xs mt-1"><a href={`${process.env.NEXT_PUBLIC_API_URL}${licenseFileUrl}`} target="_blank" rel="noreferrer" className="text-primary underline">Abrir PDF</a></div>
+                <div className="flex items-center gap-2 text-xs mt-1">
+                  <a href={`${process.env.NEXT_PUBLIC_API_URL}${licenseFileUrl}`} target="_blank" rel="noreferrer" className="text-primary underline">Abrir PDF</a>
+                  <button
+                    onClick={async () => {
+                      if (!token || !licenseFileUrl || !lic) return;
+                      setRemoving(true);
+                      setStatusMsg(null);
+                      try {
+                        const res = await apiPost<{ ok: boolean; error?: string }>(`/uploads/remove`, token, { path: licenseFileUrl });
+                        if (!res?.ok) {
+                          setStatusMsg({ type: 'error', text: res?.error || 'Falha ao remover anexo' });
+                        } else {
+                          await apiPut(`/licensing/firewall/${lic.id}`, token, { licenseFileUrl: null });
+                          setLicenseFileUrl('');
+                          setStatusMsg({ type: 'success', text: 'Anexo removido' });
+                        }
+                      } catch {
+                        setStatusMsg({ type: 'error', text: 'Falha ao remover anexo' });
+                      } finally {
+                        setRemoving(false);
+                        setTimeout(() => setStatusMsg(null), 3000);
+                      }
+                    }}
+                    className="px-2 py-1 rounded bg-red-600 text-white"
+                    disabled={removing}
+                  >
+                    {removing ? 'Removendo...' : 'Remover PDF'}
+                  </button>
+                </div>
               )}
               {uploading && <div className="text-xs text-muted mt-1">Enviando...</div>}
             </div>
