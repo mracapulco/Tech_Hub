@@ -66,15 +66,22 @@ export class UploadsController {
   async remove(@Body() body: { path?: string }, @Headers('authorization') authorization?: string) {
     if (!verifyBearer(authorization)) return { ok: false, error: 'Unauthorized' };
     const p = String(body?.path || '');
-    if (!p || !p.startsWith('/uploads/')) return { ok: false, error: 'Invalid path' };
+    if (!p) return { ok: false, error: 'Caminho inválido' };
+    if (p.startsWith('http')) return { ok: false, error: 'Anexo externo não pode ser removido' };
+    if (!p.startsWith('/uploads/')) return { ok: false, error: 'Caminho inválido' };
     try {
       const root = join(__dirname, '..', 'uploads');
       const file = basename(p);
       const full = join(root, file);
+      try {
+        await fs.stat(full);
+      } catch {
+        return { ok: false, error: 'Arquivo não encontrado' };
+      }
       await fs.unlink(full);
       return { ok: true };
     } catch (e: any) {
-      return { ok: false, error: 'Failed to remove file' };
+      return { ok: false, error: 'Falha ao remover arquivo' };
     }
   }
 }
