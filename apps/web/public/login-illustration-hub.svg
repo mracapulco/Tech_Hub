@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="hubGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8A66EE"/>
+      <stop offset="100%" stop-color="#6FC0FA"/>
+    </linearGradient>
+    <style><![CDATA[
+      .stroke-dark { stroke: #34363A; }
+      .stroke-purple { stroke: #8A66EE; }
+      .stroke-green { stroke: #A3CB5E; }
+      .fill-purple { fill: #8A66EE; }
+      .fill-green { fill: #A3CB5E; }
+      .fill-blue { fill: #6FC0FA; }
+      .fill-dark { fill: #34363A; }
+    ]]></style>
+  </defs>
+
+  <!-- transparent background (no rects) -->
+
+  <!-- central hub (corporate minimal) -->
+  <circle cx="600" cy="400" r="110" fill="url(#hubGradient)" opacity="0.9"/>
+  <circle cx="600" cy="400" r="140" fill="none" stroke="#8A66EE" stroke-width="4" stroke-dasharray="4 8"/>
+
+  <!-- connections -->
+  <g stroke-linecap="round" stroke-width="4">
+    <line class="stroke-purple" x1="600" y1="400" x2="260" y2="170"/>
+    <line class="stroke-purple" x1="600" y1="400" x2="950" y2="170"/>
+    <line class="stroke-green"  x1="600" y1="400" x2="1040" y2="420"/>
+    <line class="stroke-green"  x1="600" y1="400" x2="880" y2="640"/>
+    <line class="stroke-purple" x1="600" y1="400" x2="320" y2="640"/>
+    <line class="stroke-green"  x1="600" y1="400" x2="160" y2="420"/>
+    <line class="stroke-purple" x1="600" y1="400" x2="1020" y2="300"/>
+    <line class="stroke-green"  x1="600" y1="400" x2="200" y2="300"/>
+  </g>
+
+  <!-- nodes -->
+  <g stroke="#34363A" stroke-width="3">
+    <!-- top-left -->
+    <circle cx="260" cy="170" r="40" fill="#FFFFFF"/>
+    <path d="M245 170 h30" stroke="#8A66EE" stroke-width="5"/>
+    <path d="M260 155 v30" stroke="#A3CB5E" stroke-width="5"/>
+
+    <!-- top-right -->
+    <circle cx="950" cy="170" r="40" fill="#FFFFFF"/>
+    <rect x="935" y="155" width="30" height="30" rx="6" fill="#6FC0FA"/>
+    <path d="M940 175 h20" stroke="#8A66EE" stroke-width="4"/>
+
+    <!-- right -->
+    <circle cx="1040" cy="420" r="40" fill="#FFFFFF"/>
+    <path d="M1025 430 q15 -28 30 0" fill="none" stroke="#A3CB5E" stroke-width="5"/>
+    <path d="M1028 412 h24 v24 h-24 z" fill="none" stroke="#8A66EE"/>
+
+    <!-- bottom-right -->
+    <circle cx="880" cy="640" r="40" fill="#FFFFFF"/>
+    <path d="M860 650 h40" stroke="#6FC0FA" stroke-width="5"/>
+    <circle cx="880" cy="640" r="16" fill="#A3CB5E"/>
+
+    <!-- bottom-left -->
+    <circle cx="320" cy="640" r="40" fill="#FFFFFF"/>
+    <path d="M300 635 h40" stroke="#8A66EE" stroke-width="5"/>
+    <path d="M310 650 h20" stroke="#6FC0FA" stroke-width="4"/>
+
+    <!-- left -->
+    <circle cx="160" cy="420" r="40" fill="#FFFFFF"/>
+    <path d="M145 425 l12 -12 l20 20" fill="none" stroke="#A3CB5E" stroke-width="5"/>
+    <circle cx="160" cy="420" r="14" fill="#8A66EE"/>
+
+    <!-- extra nodes -->
+    <circle cx="1020" cy="300" r="30" fill="#FFFFFF"/>
+    <circle cx="200" cy="300" r="30" fill="#FFFFFF"/>
+    <path d="M995 300 h50" stroke="#8A66EE"/>
+    <path d="M180 300 h40" stroke="#6FC0FA"/>
+  </g>
+
+  <!-- subtle decorative arcs -->
+  <g fill="none" stroke="#6FC0FA" stroke-width="3" opacity="0.25">
+    <path d="M420 120 q180 160 360 0"/>
+    <path d="M420 720 q180 -160 360 0"/>
+    <path d="M100 580 q240 -180 480 0"/>
+    <path d="M1020 580 q-240 -180 -480 0"/>
+  </g>
+</svg>
