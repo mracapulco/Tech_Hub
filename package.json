@@ -1,6 +1,6 @@
 {
   "name": "tech-hub",
-  "version": "0.3.14",
+  "version": "0.3.18",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {

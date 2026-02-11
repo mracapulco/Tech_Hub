@@ -113,7 +113,38 @@ export default function AnaliseMaturidadePage({ params }: { params: { id: string
     try {
       const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/maturity/analysis`, token, { assessmentId: id });
       if (res?.ok) {
-        setContent(res.data || null);
+        const status = res.data?.status;
+        if (status === 'processing' || !res.data) {
+          setContent({ status: 'processing' });
+          let attempts = 0;
+          const intervalMs = 20000; // 20s
+          const maxAttempts = Math.floor((6 * 60 * 60 * 1000) / intervalMs); // 6h
+          const poll = async () => {
+            attempts++;
+            try {
+              const r = await apiGet<{ ok: boolean; data?: any; error?: string }>(`/maturity/${id}/analysis`, token);
+              if (r?.ok && r.data?.content && !r.data?.content?.status) {
+                setContent(r.data.content);
+                setLoading(false);
+                return;
+              }
+              if (r?.ok && r.data?.content?.status === 'error') {
+                setError(r.data?.content?.message || 'Falha na análise por IA.');
+                setLoading(false);
+                return;
+              }
+            } catch {}
+            if (attempts < maxAttempts) {
+              setTimeout(poll, intervalMs);
+            } else {
+              setError('Tempo de espera excedido. A análise continua processando no servidor.');
+              setLoading(false);
+            }
+          };
+          setTimeout(poll, intervalMs);
+        } else {
+          setContent(res.data || null);
+        }
       } else {
         setError(res?.error || 'Falha na análise por IA.');
       }
@@ -460,7 +491,10 @@ export default function AnaliseMaturidadePage({ params }: { params: { id: string
         <div className="text-sm text-gray-700">{(isAdmin || isTech) ? 'Nenhuma análise encontrada. Clique em “Reexecutar análise” para gerar.' : 'Nenhuma análise disponível ainda.'}</div>
       )}
 
-      {content && (
+      {content?.status === 'processing' && (
+        <div className="text-sm text-gray-700">Processando análise por IA… a página será atualizada automaticamente.</div>
+      )}
+      {content && !content?.status && (
         <div className="space-y-6">
           <Domain keyName={'identify' as any} title="IDENTIFICAR" />
           <Domain keyName={'protect' as any} title="PROTEGER" />

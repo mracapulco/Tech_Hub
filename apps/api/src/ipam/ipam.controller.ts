@@ -39,8 +39,11 @@ export class IpamController {
       const payload: any = this.jwt.verify(token);
       const userId: string | null = payload?.sub ?? null;
       if (!userId) return { ok: false, error: 'Invalid token' } as const;
+      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+      const username = String(payload?.username || '').toLowerCase();
+      const isGlobalAdmin = globalAdmins.includes(username);
       const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
       const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
       const allowedCompanyIds = memberships.map((m: any) => m.companyId);
       return { ok: true, userId, isAdmin, isTechnician, allowedCompanyIds } as const;

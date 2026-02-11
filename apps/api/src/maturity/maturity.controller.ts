@@ -171,7 +171,7 @@ export class MaturityController {
     const { isAdmin, isTech } = await this.getRoles(userId);
     if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
 
-    const { assessmentId, answers, companyContext, targetFrameworks, language } = body || {};
+    const { assessmentId, answers, companyContext, targetFrameworks, language, depth } = body || {};
     let sourceAnswers = answers;
     let ctx = companyContext || {};
     if (assessmentId && !answers) {
@@ -181,24 +181,51 @@ export class MaturityController {
       // Passar companyId para permitir carregamento de perfil do cliente
       ctx = { ...(companyContext || {}), companyId: record.companyId };
     }
+    // Se houver assessmentId, processar de forma assíncrona para evitar timeout de requisição longa
+    if (assessmentId) {
+      // Marcar como "processing"
+      await this.prisma.maturityAnalysis.upsert({
+        where: { assessmentId: String(assessmentId) },
+        update: { content: { status: 'processing' }, updatedAt: new Date(), createdById: userId },
+        create: { assessmentId: String(assessmentId), content: { status: 'processing' }, createdById: userId },
+      });
+      // Iniciar processamento em background (não aguardar)
+      (async () => {
+        try {
+          const result = await this.ai.analyze({
+            answers: sourceAnswers,
+            companyContext: ctx,
+            targetFrameworks,
+            language,
+            depth,
+          });
+          await this.prisma.maturityAnalysis.upsert({
+            where: { assessmentId: String(assessmentId) },
+            update: { content: result, updatedAt: new Date(), createdById: userId },
+            create: { assessmentId: String(assessmentId), content: result, createdById: userId },
+          });
+        } catch (e: any) {
+          console.error('AI analysis error:', e?.message || e, e?.stack || '');
+          await this.prisma.maturityAnalysis.upsert({
+            where: { assessmentId: String(assessmentId) },
+            update: { content: { status: 'error', message: e?.message || 'Falha na análise por IA.' }, updatedAt: new Date(), createdById: userId },
+            create: { assessmentId: String(assessmentId), content: { status: 'error', message: e?.message || 'Falha na análise por IA.' }, createdById: userId },
+          });
+        }
+      })();
+      return { ok: true, data: { status: 'processing' } };
+    }
+    // Sem assessmentId: processamento síncrono (retorna imediatamente para uso direto)
     try {
       const result = await this.ai.analyze({
         answers: sourceAnswers,
         companyContext: ctx,
         targetFrameworks,
         language,
+        depth,
       });
-      // Persistir análise atrelada à avaliação
-      if (assessmentId) {
-        await this.prisma.maturityAnalysis.upsert({
-          where: { assessmentId: String(assessmentId) },
-          update: { content: result, updatedAt: new Date(), createdById: userId },
-          create: { assessmentId: String(assessmentId), content: result, createdById: userId },
-        });
-      }
       return { ok: true, data: result };
     } catch (e: any) {
-      // Log detalhado para diagnóstico em ambiente local
       console.error('AI analysis error:', e?.message || e, e?.stack || '');
       const msg = e?.message?.includes('OPENAI_API_KEY') ? 'Configuração ausente: OPENAI_API_KEY.' : 'Falha na análise por IA.';
       return { ok: false, error: msg };
