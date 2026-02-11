@@ -32,6 +32,7 @@ export default function AnaliseMaturidadePage({ params }: { params: { id: string
   const [isTech, setIsTech] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [assessment, setAssessment] = useState<{ companyId?: string; companyName?: string; date?: string; createdAt?: string } | null>(null);
+  const [depth, setDepth] = useState<'basic' | 'standard' | 'deep'>('deep');
 
   function imgUrl(u?: string | null) {
     if (!u) return '';
@@ -111,7 +112,7 @@ export default function AnaliseMaturidadePage({ params }: { params: { id: string
     setLoading(true);
     setError(null);
     try {
-      const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/maturity/analysis`, token, { assessmentId: id });
+      const res = await apiPost<{ ok: boolean; data?: any; error?: string }>(`/maturity/analysis`, token, { assessmentId: id, depth });
       if (res?.ok) {
         const status = res.data?.status;
         if (status === 'processing' || !res.data) {
@@ -450,6 +451,13 @@ export default function AnaliseMaturidadePage({ params }: { params: { id: string
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Análise por IA</h1>
         <div className="flex gap-2">
+          <div>
+            <select value={depth} onChange={(e) => setDepth(e.target.value as any)} className="px-3 py-2 border rounded">
+              <option value="basic">Básico</option>
+              <option value="standard">Intermediário</option>
+              <option value="deep">Avançado</option>
+            </select>
+          </div>
           <button onClick={() => router.back()} className="px-3 py-2 rounded bg-gray-800 text-white hover:bg-black">Voltar</button>
           <div className="relative">
             <button onClick={() => setExportOpen((v) => !v)} className="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">Exportar</button>
