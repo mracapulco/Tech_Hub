@@ -1,0 +1,280 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TECHNICIAN
+  CLIENT
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String?  @unique
+  name      String
+  lastName  String?
+  password  String
+  avatarUrl String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships UserCompanyMembership[]
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  cnpj      String?  @unique
+  name      String
+  fantasyName String?
+  address   String?
+  city      String?
+  state     String?
+  zipcode   String?
+  phone     String?
+  logoUrl   String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships UserCompanyMembership[]
+  maturityAssessments MaturityAssessment[]
+  sites      Site[]
+  vrfs       Vrf[]
+  subnets    IpSubnet[]
+  firewallLicenses FirewallLicense[]
+}
+
+model UserCompanyMembership {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  role      Role
+  createdAt DateTime @default(now())
+
+  @@unique([userId, companyId])
+}
+
+// Registro de testes de maturidade de segurança
+model MaturityAssessment {
+  id         String   @id @default(uuid())
+  date       String
+  company    Company  @relation(fields: [companyId], references: [id])
+  companyId  String
+  answers    Json?
+  groupScores Json?
+  totalScore Int?
+  maxScore   Int?
+  createdAt  DateTime @default(now())
+
+  // Relação 1:1 com análise por IA (quando existir)
+  analysis   MaturityAnalysis?
+}
+
+// Catálogo global de tipos de dispositivo (ex.: Nobreak, Servidor, Rack, Switch)
+model DeviceType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brands      BrandDeviceType[]
+  devices     Device[]
+}
+
+// Catálogo global de marcas (ex.: APC, Dell, HP)
+model Brand {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  logoUrl     String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deviceTypes BrandDeviceType[]
+  devices     Device[]
+}
+
+// Relação N:N entre Marcas e Tipos de Dispositivo
+model BrandDeviceType {
+  id            String     @id @default(uuid())
+  brand         Brand      @relation(fields: [brandId], references: [id])
+  brandId       String
+  deviceType    DeviceType @relation(fields: [deviceTypeId], references: [id])
+  deviceTypeId  String
+  createdAt     DateTime   @default(now())
+
+  @@unique([brandId, deviceTypeId])
+}
+
+// Inventário de dispositivos
+model Device {
+  id           String     @id @default(uuid())
+  deviceType   DeviceType @relation(fields: [deviceTypeId], references: [id])
+  deviceTypeId String
+  brand        Brand      @relation(fields: [brandId], references: [id])
+  brandId      String
+  model        String
+  slug         String?
+  uHeight      Int?
+  isFullDepth  Boolean    @default(false)
+  frontImage   Boolean    @default(false)
+  rearImage    Boolean    @default(false)
+  weight       Float?
+  weightUnit   String?    @default("kg")
+  airflow      String?
+  consolePorts Json?
+  interfaces   Json?
+  moduleBays   Json?
+  status       String     @default("ACTIVE")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// Configurações globais (ex.: chaves de integração) com valor criptografado
+model Setting {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  valueEnc   String
+  updatedBy  String?
+  updatedAt  DateTime @default(now()) @updatedAt
+}
+
+// Resultado de análise por IA atrelado a um teste de maturidade
+model MaturityAnalysis {
+  id            String             @id @default(uuid())
+  assessment    MaturityAssessment @relation(fields: [assessmentId], references: [id])
+  assessmentId  String             @unique
+  content       Json
+  provider      String?
+  model         String?
+  createdById   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+enum IpAddressStatus {
+  ASSIGNED
+  RESERVED
+}
+
+model Vrf {
+  id        String   @id @default(uuid())
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subnets   IpSubnet[]
+
+  @@unique([companyId, name])
+}
+
+model Site {
+  id        String   @id @default(uuid())
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  name      String
+  city      String?
+  state     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vlans     Vlan[]
+  subnets   IpSubnet[]
+  firewallLicenses FirewallLicense[]
+
+  @@unique([companyId, name])
+}
+
+model Vlan {
+  id        String   @id @default(uuid())
+  site      Site     @relation(fields: [siteId], references: [id])
+  siteId    String
+  number    Int
+  name      String
+  purpose   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subnets   IpSubnet[]
+
+  @@unique([siteId, number])
+}
+
+model FirewallLicense {
+  id          String   @id @default(uuid())
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  site        Site?    @relation(fields: [siteId], references: [id])
+  siteId      String?
+  ipAddress   IpAddress? @relation(name: "IpAddressFirewallLicenses", fields: [ipAddressId], references: [id])
+  ipAddressId String?
+  vendor      String
+  model       String
+  serial      String
+  licenseName String
+  licenseNumber String?
+  licenseFileUrl String?
+  expiresAt   DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([expiresAt])
+  @@index([ipAddressId])
+}
+
+model IpSubnet {
+  id          String   @id @default(uuid())
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  site        Site?    @relation(fields: [siteId], references: [id])
+  siteId      String?
+  vrf         Vrf?     @relation(fields: [vrfId], references: [id])
+  vrfId       String?
+  vlan        Vlan?    @relation(fields: [vlanId], references: [id])
+  vlanId      String?
+  name        String
+  cidr        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addresses   IpAddress[]
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([vrfId])
+  @@index([vlanId])
+}
+
+model IpAddress {
+  id         String          @id @default(uuid())
+  subnet     IpSubnet        @relation(fields: [subnetId], references: [id])
+  subnetId   String
+  address    String
+  hostname   String?
+  status     IpAddressStatus @default(ASSIGNED)
+  assignedTo String?
+  createdAt  DateTime        @default(now())
+
+  firewallLicenses FirewallLicense[] @relation(name: "IpAddressFirewallLicenses")
+
+  @@unique([subnetId, address])
+}
