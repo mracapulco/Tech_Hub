@@ -58,7 +58,8 @@ export class MaturityAiService {
       apiKey = process.env.OPENAI_API_KEY || (await this.settings.getOpenAiKeyRaw()) || 'sk-local';
     }
     // Recriar cliente a cada chamada para garantir que baseURL/apiKey atualizados sejam aplicados
-    const client = new OpenAI({ apiKey, baseURL });
+    const timeoutMs = Number(process.env.OPENAI_TIMEOUT_MS || 300000); // 5 min
+    const client = new OpenAI({ apiKey, baseURL, timeout: timeoutMs });
     const language = input.language || 'pt-BR';
     const frameworks = input.targetFrameworks?.length ? input.targetFrameworks : ['ISO27001', 'NISTCSF'];
 
@@ -127,27 +128,46 @@ export class MaturityAiService {
       }),
     ].join('\n');
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: promptText },
-      ],
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-    });
+    const maxTokens = Number(process.env.OPENAI_MAX_TOKENS || 4096);
+    const completion = await client.chat.completions.create(
+      {
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: promptText },
+        ],
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        max_tokens: maxTokens,
+      },
+      { timeout: timeoutMs },
+    );
 
     const content = completion.choices?.[0]?.message?.content || '{}';
-    let parsed: any = {};
+    const repair = (s: string) => {
+      let t = String(s || '').trim();
+      const fence = t.match(/```json([\s\S]*?)```/i);
+      if (fence) t = fence[1].trim();
+      // remover comentários e vírgulas finais
+      t = t.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      t = t.replace(/,\s*([}\]])/g, '$1');
+      t = t.replace(/\u00A0/g, ' ');
+      return t;
+    };
+    let parsed: any;
+    const repaired = repair(content);
     try {
-      parsed = JSON.parse(content);
+      parsed = JSON.parse(repaired);
     } catch {
-      // fallback: tentar extrair bloco JSON
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        parsed = JSON.parse(match[0]);
+      const m = repaired.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          parsed = JSON.parse(repair(m[0]));
+        } catch {
+          parsed = { status: 'error', message: 'Conteúdo inválido da IA', rawText: content };
+        }
       } else {
-        parsed = { raw: content };
+        parsed = { status: 'error', message: 'Conteúdo inválido da IA', rawText: content };
       }
     }
     return parsed;

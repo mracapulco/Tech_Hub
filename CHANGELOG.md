@@ -4,6 +4,59 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.16] — 2026-02-05
+
+### Adicionado
+- Maturidade • IA: processamento assíncrono na API (status "processing") com resultado persistido em `maturityAnalysis`.
+- Maturidade • IA (Web): polling automático na página de análise até concluir (com mensagem “Processando…”).
+
+### Alterado
+- Compatibilidade com servidores locais (Ollama/LM Studio): leitura de `OPENAI_TIMEOUT_MS` e `max_tokens` para evitar timeouts.
+- Timeout configurável via `.env` e propagado pelo `docker-compose.yml` (serviço `api`).
+
+### Corrigido
+- Erros de “Connection error / Request timed out” em análises longas, evitando queda da UI.
+
+### Operacional
+- Passos de deploy adicionados para produção com HAProxy: aumentar `timeout client/server` para chamadas longas.
+
+## [0.3.17] — 2026-02-11
+
+### Adicionado
+- Configuração `OPENAI_MAX_TOKENS` na API para controlar tamanho de respostas em provedores locais (Ollama/LM Studio).
+
+### Corrigido
+- Robustez do parser de JSON da IA: reparo automático de saída (remoção de vírgulas finais, extração de blocos ```json```), evitando erros do tipo “Expected ',' or ']'”.
+- UI de Análise: extensão do polling para execuções longas (até 6h, intervalos de 20s).
+
+### Operacional
+- Orientações para uso de motor externo (Ollama no notebook) com liberação de porta 11434/TCP ou túnel SSH.
+
+## [0.3.15] — 2025-12-18
+
+### Adicionado
+- Licenciamento — Firewall:
+  - Tela “Visualizar” com resumo gerencial e anexo embutido.
+  - Exportação PDF com cabeçalho padrão do Tech Hub e inclusão do PDF da licença em página separada.
+  - Tela “Editar” com feedback visual de sucesso/erro e upload de PDF.
+- Admin Global:
+  - Reconhecimento de `GLOBAL_ADMINS`/`NEXT_PUBLIC_GLOBAL_ADMINS` em API e Web.
+  - CRUD liberado sem vínculo para IPAM (Sites, VLANs, Subnets, Endereços), Dispositivos, Marcas e Tipos.
+
+### Alterado
+- Empresas: admin global lista todas as empresas sem precisar de membership.
+- IPAM e Configurações: botões de criar/editar/excluir habilitados para admin global.
+- Login (Web): base de API corrigida (evita erro de rede) e fallback estável.
+- Exportação (Firewall): utilização da `public/logo.svg` como logo do Tech Hub; card ajustado para exibir logo da empresa e remoção de botão redundante de anexo.
+
+### Corrigido
+- Permissões entre API/Web consistentes (admin/técnico vs clientes).
+- Consolidação de empresas duplicadas e migração de vínculos dependentes.
+
+### Operacional
+- `.gitignore` mantém `.env` e uploads fora de versionamento.
+- Containers reconstruídos (`web`, `api`) com variáveis de ambiente definidas.
+
 ## [0.3.6] — 2025-12-02
 
 ### Adicionado

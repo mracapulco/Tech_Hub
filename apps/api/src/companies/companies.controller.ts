@@ -54,7 +54,10 @@ export class CompaniesController {
         where: { userId },
         select: { companyId: true, role: true },
       });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
+      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+      const username = String(payload?.username || '').toLowerCase();
+      const isGlobalAdmin = globalAdmins.includes(username);
+      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
       const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
       const allowedCompanyIds = memberships.map((m: any) => m.companyId);
       // Lista empresas conforme permissões: ADMIN vê todas, demais apenas seus vínculos

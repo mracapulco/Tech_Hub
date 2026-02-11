@@ -47,7 +47,8 @@ export default function DevicesPage() {
         try {
           const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (res?.data?.memberships || []) as { role: string }[];
-          setIsAdmin(memberships.some((m) => m.role === "ADMIN"));
+          const isGlobalAdmin = !!res?.data?.isGlobalAdmin;
+          setIsAdmin(isGlobalAdmin || memberships.some((m) => m.role === "ADMIN"));
           setIsTech(memberships.some((m) => m.role === "TECHNICIAN"));
         } catch {
           setIsAdmin(false);

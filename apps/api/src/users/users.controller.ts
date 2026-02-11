@@ -34,9 +34,11 @@ export class UsersController {
     if (!userId) return { ok: false, message: 'Não autorizado' };
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) return { ok: false, message: 'Usuário não encontrado' };
+    const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+    const isGlobalAdmin = globalAdmins.includes(String((user as any).username || '').toLowerCase());
     return {
       ok: true,
-      user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null },
+      user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null, isGlobalAdmin },
     };
   }
 
@@ -149,6 +151,8 @@ export class UsersController {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) return { ok: false, error: 'Usuário não encontrado.' };
     const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: id }, include: { company: true } });
+    const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+    const isGlobalAdmin = globalAdmins.includes(String((user as any).username || '').toLowerCase());
     return {
       ok: true,
       data: {
@@ -160,6 +164,7 @@ export class UsersController {
         status: user.status,
         avatarUrl: (user as any).avatarUrl ?? null,
         memberships: memberships.map((m: any) => ({ id: m.id, companyId: m.companyId, companyName: m.company?.name, role: m.role })),
+        isGlobalAdmin,
       },
     };
   }
