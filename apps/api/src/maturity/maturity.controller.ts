@@ -171,7 +171,7 @@ export class MaturityController {
     const { isAdmin, isTech } = await this.getRoles(userId);
     if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
 
-    const { assessmentId, answers, companyContext, targetFrameworks, language } = body || {};
+    const { assessmentId, answers, companyContext, targetFrameworks, language, depth } = body || {};
     let sourceAnswers = answers;
     let ctx = companyContext || {};
     if (assessmentId && !answers) {
@@ -197,6 +197,7 @@ export class MaturityController {
             companyContext: ctx,
             targetFrameworks,
             language,
+            depth,
           });
           await this.prisma.maturityAnalysis.upsert({
             where: { assessmentId: String(assessmentId) },
@@ -221,6 +222,7 @@ export class MaturityController {
         companyContext: ctx,
         targetFrameworks,
         language,
+        depth,
       });
       return { ok: true, data: result };
     } catch (e: any) {

@@ -32,6 +32,21 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 ### Operacional
 - Orientações para uso de motor externo (Ollama no notebook) com liberação de porta 11434/TCP ou túnel SSH.
 
+## [0.3.18] — 2026-02-11
+
+### Adicionado
+- Profundidade da análise (basic/standard/deep) na API e na Web:
+  - Modo Avançado exige 5–8 ações por domínio, descrição mínima, métricas mensuráveis, ferramentas específicas e plano de rollout 30/60/90.
+  - Seletor de profundidade na UI e envio para a API.
+
+### Alterado
+- Prompt reforçado para reduzir genericidade e tornar o roadmap operativo, com campos obrigatórios por ação.
+
+### Recomendado
+- Ajustar `.env` e Ollama para respostas mais longas:
+  - `OPENAI_MAX_TOKENS=8192` e `OPENAI_TIMEOUT_MS=7200000`
+  - Ollama: `num_ctx=8192`, `num_predict=4096`
+
 ## [0.3.15] — 2025-12-18
 
 ### Adicionado

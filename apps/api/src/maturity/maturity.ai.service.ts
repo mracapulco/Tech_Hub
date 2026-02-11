@@ -16,6 +16,7 @@ type AnalysisInput = {
   };
   targetFrameworks?: Framework[];
   language?: 'pt-BR' | 'en';
+  depth?: 'basic' | 'standard' | 'deep';
 };
 
 @Injectable()
@@ -62,6 +63,12 @@ export class MaturityAiService {
     const client = new OpenAI({ apiKey, baseURL, timeout: timeoutMs });
     const language = input.language || 'pt-BR';
     const frameworks = input.targetFrameworks?.length ? input.targetFrameworks : ['ISO27001', 'NISTCSF'];
+    const depth = input.depth || 'deep';
+    const req = depth === 'basic'
+      ? { actionsMin: 2, actionsMax: 4, wordsMin: 40, metricsMin: 2, toolsMin: 2 }
+      : depth === 'standard'
+      ? { actionsMin: 3, actionsMax: 6, wordsMin: 60, metricsMin: 3, toolsMin: 2 }
+      : { actionsMin: 5, actionsMax: 8, wordsMin: 90, metricsMin: 4, toolsMin: 3 };
 
     const companyCtx = input.companyContext || {};
     const answers = input.report || input.answers || {};
@@ -80,7 +87,8 @@ export class MaturityAiService {
     const system = `${this.corpusPtBr()}\n` +
       `Padronize prioridades para 'Alta','Média','Baixa' e escreva sempre em PT-BR. ` +
       `Estruture a análise por domínio (Identify, Protect, Detect, Respond, Recover, Governance). ` +
-      `Inclua sugestões de práticas e, quando apropriado, aplicações/softwares que podem ajudar (campo 'recommended_tools'). ` +
+      `Inclua sugestões práticas com aplicações/softwares quando apropriado (campo 'recommended_tools'). ` +
+      `Para cada domínio produza entre ${req.actionsMin} e ${req.actionsMax} ações detalhadas; cada ação deve ter no mínimo ${req.wordsMin} palavras em 'description', conter 'framework_refs' (NIST/ISO), 'effort_hours', 'owner_role', 'timeline_days', 'dependencies', 'risks', 'metrics' (mínimo ${req.metricsMin}), 'recommended_tools' (mínimo ${req.toolsMin}) e 'rollout_plan' com fases d30/d60/d90. ` +
       `Não inclua pontuação geral. Responda como JSON válido, sem comentários.`;
     const promptText = [
       'Analise o seguinte questionário/relatório de maturidade em segurança cibernética.',
@@ -91,6 +99,7 @@ export class MaturityAiService {
       `Perfil do Cliente: ${JSON.stringify(clientProfile || {})}.`,
       'Respostas/relatório:',
       JSON.stringify(answers),
+      `Requisitos de profundidade: domínio com entre ${req.actionsMin}-${req.actionsMax} ações detalhadas; descrição mínima ${req.wordsMin} palavras por ação; ${req.metricsMin}+ métricas mensuráveis por ação; ${req.toolsMin}+ ferramentas específicas por ação; plano de rollout d30/d60/d90 por ação.`,
       'Formato esperado (exemplo):',
       JSON.stringify({
         identify: {
@@ -104,6 +113,7 @@ export class MaturityAiService {
               dependencies: ['ferramenta de descoberta de ativos'], risks: ['ativos não gerenciados'],
               metrics: ['% ativos descobertos vs. estimados'],
               recommended_tools: [{ name: 'GLPI', type: 'Inventário', purpose: 'Catálogo e CMDB' }],
+              rollout_plan: { d30: ['passos'], d60: ['passos'], d90: ['passos'] },
             },
           ],
         },
@@ -117,6 +127,7 @@ export class MaturityAiService {
               dependencies: ['diretório de identidades'], risks: ['comprometimento de credenciais'],
               metrics: ['% contas com MFA'],
               recommended_tools: [{ name: 'Azure AD', type: 'IAM', purpose: 'MFA e políticas de acesso' }],
+              rollout_plan: { d30: [], d60: [], d90: [] },
             },
           ],
         },
