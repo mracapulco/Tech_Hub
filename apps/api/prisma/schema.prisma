@@ -50,6 +50,11 @@ model Company {
   vrfs       Vrf[]
   subnets    IpSubnet[]
   firewallLicenses FirewallLicense[]
+  backupRepositories BackupRepository[]
+  backupProxies BackupProxy[]
+  backupCores BackupCore[]
+  backupJobs BackupJob[]
+  backupSummaries BackupSummaryMonthly[]
 }
 
 model UserCompanyMembership {
@@ -196,6 +201,8 @@ model Site {
   vlans     Vlan[]
   subnets   IpSubnet[]
   firewallLicenses FirewallLicense[]
+  backupRepositories BackupRepository[]
+  backupProxies BackupProxy[]
 
   @@unique([companyId, name])
 }
@@ -277,4 +284,134 @@ model IpAddress {
   firewallLicenses FirewallLicense[] @relation(name: "IpAddressFirewallLicenses")
 
   @@unique([subnetId, address])
+}
+
+// Backup
+enum BackupRunStatus {
+  SUCCESS
+  WARN
+  FAIL
+}
+
+model BackupRepository {
+  id           String   @id @default(uuid())
+  company      Company  @relation(fields: [companyId], references: [id])
+  companyId    String
+  site         Site?    @relation(fields: [siteId], references: [id])
+  siteId       String?
+  name         String
+  type         String
+  capacityGB   Int
+  usedGB       Int      @default(0)
+  retentionPolicy String?
+  compressionRatio Float?
+  dedupeRatio     Float?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([siteId])
+
+  jobs BackupJob[]
+}
+
+model BackupProxy {
+  id         String   @id @default(uuid())
+  company    Company  @relation(fields: [companyId], references: [id])
+  companyId  String
+  site       Site?    @relation(fields: [siteId], references: [id])
+  siteId     String?
+  hostname   String
+  cores      Int
+  memoryGB   Int
+  throughputMBps Int?
+  concurrency Int?
+  transportMode String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([siteId])
+
+  jobs BackupJob[]
+}
+
+model BackupCore {
+  id          String   @id @default(uuid())
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  hostname    String
+  version     String?
+  license     String?
+  jobsCount   Int       @default(0)
+  repositoriesCount Int @default(0)
+  proxiesCount Int      @default(0)
+  healthStatus String?  @default("UNKNOWN")
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([companyId])
+}
+
+model BackupJob {
+  id            String   @id @default(uuid())
+  company       Company  @relation(fields: [companyId], references: [id])
+  companyId     String
+  name          String
+  type          String
+  schedule      String?
+  retentionPolicy String?
+  repository    BackupRepository @relation(fields: [repositoryId], references: [id])
+  repositoryId  String
+  proxy         BackupProxy?     @relation(fields: [proxyId], references: [id])
+  proxyId       String?
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  runs          BackupRun[]
+
+  @@index([companyId])
+  @@index([repositoryId])
+  @@index([proxyId])
+}
+
+model BackupRun {
+  id            String          @id @default(uuid())
+  job           BackupJob       @relation(fields: [jobId], references: [id])
+  jobId         String
+  startAt       DateTime
+  endAt         DateTime?
+  status        BackupRunStatus
+  processedGB   Float           @default(0)
+  transferredGB Float           @default(0)
+  avgSpeedMBps  Float?
+  bottleneck    String?
+  errors        String?
+  restorePointsCreated Int?     @default(0)
+  createdAt     DateTime        @default(now())
+
+  @@index([jobId])
+  @@index([status])
+}
+
+model BackupSummaryMonthly {
+  id           String   @id @default(uuid())
+  company      Company  @relation(fields: [companyId], references: [id])
+  companyId    String
+  month        String
+  jobsTotal    Int      @default(0)
+  successRate  Float    @default(0)
+  failures     Int      @default(0)
+  avgDurationMinutes Float @default(0)
+  storageGrowthGB Float  @default(0)
+  topIssues    String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([companyId, month])
 }

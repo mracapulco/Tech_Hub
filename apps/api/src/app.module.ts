@@ -17,6 +17,7 @@ import { SitesModule } from './sites/sites.module';
 import { VlansModule } from './vlans/vlans.module';
 import { ZabbixModule } from './integrations/zabbix/zabbix.module';
 import { FirewallModule } from './licensing/firewall/firewall.module';
+import { BackupModule } from './backup/backup.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { FirewallModule } from './licensing/firewall/firewall.module';
     VlansModule,
     ZabbixModule,
     FirewallModule,
+    BackupModule,
   ],
   controllers: [AppController],
   providers: [AppService],

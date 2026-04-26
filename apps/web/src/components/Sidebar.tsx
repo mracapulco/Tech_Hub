@@ -106,6 +106,12 @@ export default function Sidebar() {
                 </svg>
                 <span>VLANs</span>
               </Link>
+              <Link href="/gestao/backup" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Backup">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>Backup</span>
+              </Link>
               <details open>
                 <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
