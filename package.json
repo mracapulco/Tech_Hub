@@ -1,6 +1,6 @@
 {
   "name": "tech-hub",
-  "version": "0.3.20",
+  "version": "0.4.0",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
@@ -12,3 +12,4 @@
     "start:api": "npm run start:prod --prefix apps/api"
   }
 }
+

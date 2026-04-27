@@ -28,6 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const labelFromPath = (p: string | null): string => {
     if (!p) return 'Módulo';
     if (p.startsWith('/dashboard')) return 'Dashboard';
+    if (p.startsWith('/gestao')) return 'Gestão';
     if (p.startsWith('/seguranca')) return 'Segurança';
     if (p.startsWith('/configuracoes')) return 'Configurações';
     return 'Tech Hub';

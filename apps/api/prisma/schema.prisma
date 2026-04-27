@@ -55,6 +55,7 @@ model Company {
   backupCores BackupCore[]
   backupJobs BackupJob[]
   backupSummaries BackupSummaryMonthly[]
+  adFsProjects AdFsProject[]
 }
 
 model UserCompanyMembership {
@@ -414,4 +415,202 @@ model BackupSummaryMonthly {
   updatedAt    DateTime @updatedAt
 
   @@unique([companyId, month])
+}
+
+enum AdFsNodeType {
+  ROOT
+  UNIT
+  SECTOR
+  SUBSECTOR
+  FOLDER
+}
+
+enum AdFsGroupKind {
+  GF
+  GA
+}
+
+enum AdFsPermissionProfile {
+  L
+  LG
+  LE
+  FULL
+}
+
+enum AdFsProjectStatus {
+  DRAFT
+  APPROVED
+  IMPLEMENTED
+}
+
+model AdFsProject {
+  id          String             @id @default(uuid())
+  company     Company            @relation(fields: [companyId], references: [id])
+  companyId   String
+  name        String
+  description String?
+  domainName  String?
+  rootOuName  String?
+  rootPath    String             @default("D:\\FILESERVER")
+  status      AdFsProjectStatus  @default(DRAFT)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  orgNodes    AdFsOrgNode[]
+  ouNodes     AdFsOuNode[]
+  groups      AdFsGroup[]
+  users       AdFsUserPlan[]
+  folders     AdFsFolderNode[]
+  gpos        AdFsGpoPlan[]
+
+  @@index([companyId])
+}
+
+model AdFsOrgNode {
+  id          String       @id @default(uuid())
+  project     AdFsProject  @relation(fields: [projectId], references: [id])
+  projectId   String
+  parent      AdFsOrgNode? @relation("AdFsOrgTree", fields: [parentId], references: [id])
+  parentId    String?
+  children    AdFsOrgNode[] @relation("AdFsOrgTree")
+  type        AdFsNodeType
+  name        String
+  code        String?
+  description String?
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users       AdFsUserPlan[]
+  folders     AdFsFolderNode[]
+  groups      AdFsGroup[]
+
+  @@index([projectId])
+  @@index([parentId])
+}
+
+model AdFsOuNode {
+  id          String       @id @default(uuid())
+  project     AdFsProject  @relation(fields: [projectId], references: [id])
+  projectId   String
+  parent      AdFsOuNode?  @relation("AdFsOuTree", fields: [parentId], references: [id])
+  parentId    String?
+  children    AdFsOuNode[] @relation("AdFsOuTree")
+  name        String
+  distinguishedName String?
+  description String?
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users       AdFsUserPlan[]
+  gpos        AdFsGpoPlan[]
+
+  @@index([projectId])
+  @@index([parentId])
+}
+
+model AdFsGroup {
+  id          String         @id @default(uuid())
+  project     AdFsProject    @relation(fields: [projectId], references: [id])
+  projectId   String
+  kind        AdFsGroupKind
+  name        String
+  description String?
+  permission  AdFsPermissionProfile?
+  orgNode     AdFsOrgNode?   @relation(fields: [orgNodeId], references: [id])
+  orgNodeId   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  members     AdFsUserPlan[] @relation("AdFsGroupMembers")
+  folderPermissions AdFsFolderPermission[]
+
+  @@index([projectId])
+  @@index([orgNodeId])
+}
+
+model AdFsUserPlan {
+  id          String       @id @default(uuid())
+  project     AdFsProject  @relation(fields: [projectId], references: [id])
+  projectId   String
+  orgNode     AdFsOrgNode? @relation(fields: [orgNodeId], references: [id])
+  orgNodeId   String?
+  ouNode      AdFsOuNode?  @relation(fields: [ouNodeId], references: [id])
+  ouNodeId    String?
+  fullName    String
+  firstName   String
+  lastName    String?
+  username    String
+  email       String?
+  title       String?
+  enabled     Boolean      @default(true)
+  initialPassword String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  groups      AdFsGroup[]  @relation("AdFsGroupMembers")
+
+  @@index([projectId])
+  @@index([orgNodeId])
+  @@index([ouNodeId])
+}
+
+model AdFsFolderNode {
+  id          String       @id @default(uuid())
+  project     AdFsProject  @relation(fields: [projectId], references: [id])
+  projectId   String
+  parent      AdFsFolderNode? @relation("AdFsFolderTree", fields: [parentId], references: [id])
+  parentId    String?
+  children    AdFsFolderNode[] @relation("AdFsFolderTree")
+  orgNode     AdFsOrgNode? @relation(fields: [orgNodeId], references: [id])
+  orgNodeId   String?
+  type        AdFsNodeType @default(FOLDER)
+  name        String
+  pathOverride String?
+  disableInheritance Boolean @default(true)
+  appliesTo   String?      @default("ThisFolderOnly")
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  permissions  AdFsFolderPermission[]
+
+  @@index([projectId])
+  @@index([parentId])
+  @@index([orgNodeId])
+}
+
+model AdFsFolderPermission {
+  id           String                @id @default(uuid())
+  folderNode   AdFsFolderNode        @relation(fields: [folderNodeId], references: [id])
+  folderNodeId String
+  group        AdFsGroup             @relation(fields: [groupId], references: [id])
+  groupId      String
+  permission   AdFsPermissionProfile
+  appliesTo    String                @default("ThisFolderSubfoldersAndFiles")
+  deny         Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([folderNodeId])
+  @@index([groupId])
+}
+
+model AdFsGpoPlan {
+  id          String       @id @default(uuid())
+  project     AdFsProject  @relation(fields: [projectId], references: [id])
+  projectId   String
+  ouNode      AdFsOuNode?  @relation(fields: [ouNodeId], references: [id])
+  ouNodeId    String?
+  name        String
+  description String?
+  category    String?
+  linkEnabled Boolean      @default(true)
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([ouNodeId])
 }

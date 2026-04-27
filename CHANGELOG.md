@@ -4,6 +4,25 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.3.21] — 2026-04-27
+
+### Adicionado
+- Gestão • AD / File Server: novo planejador V1 com CRUD de projetos, estrutura organizacional em árvore, usuários planejados, grupos, pastas, permissões e preview de script PowerShell.
+- Gestão • AD / File Server: importação e exportação de usuários planejados via CSV, incluindo setor por caminho, senha inicial e grupos `GA_`.
+- Gestão • AD / File Server: seleção de senha no planejamento de usuários com suporte a senha aleatória forte visível em tela, regeneração manual e senha definida manualmente.
+
+### Alterado
+- Gestão • AD / File Server: bloco de usuários ajustado para trabalhar apenas com `Setor` e seleção de grupos do File Server em duas colunas, listando somente grupos `GA_`.
+- Gestão • AD / File Server: seleção de setor dos usuários passa a exibir a estrutura organizacional em formato hierárquico, evitando ambiguidade entre nomes iguais.
+- Script PowerShell (AD / File Server): criação de usuários alinhada com a estrutura `OU=SETORES,OU=<OU Raiz>,DC=...`, usando a senha registrada no planejamento.
+
+### Corrigido
+- Gestão • AD / File Server: persistência da senha gerada aleatoriamente no planejamento, refletindo corretamente no preview do script PowerShell.
+- Gestão • AD / File Server: preview de criação de usuários não cai mais em `CN=Users` nem no fallback indevido `Temp@123456` quando há senha planejada.
+
+### Operacional
+- Versões atualizadas: root e web `0.4.0`.
+
 ## [0.3.19] — 2026-02-11
 
 ### Operacional
@@ -347,3 +366,4 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ### Operacional
 - Versões atualizadas: root e web `0.3.14`.
+
