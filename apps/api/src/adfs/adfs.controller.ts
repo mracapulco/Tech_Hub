@@ -335,8 +335,12 @@ export class AdfsController {
     if (!folder) return { ok: false, error: 'Pasta não encontrada' };
     const access = await this.canAccessProject(folder.projectId, ctx);
     if (!access.ok) return access;
-    const data = await this.svc.addFolderPermission(body);
-    return { ok: true, data };
+    try {
+      const data = await this.svc.addFolderPermission(body);
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Falha ao adicionar permissão' };
+    }
   }
 
   @Delete('folder-permissions/:id')

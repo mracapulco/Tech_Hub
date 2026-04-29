@@ -168,6 +168,25 @@ export default function AdFsPage() {
     }
   }
 
+  function downloadPs1() {
+    if (!script) return;
+    const baseName = (selectedProject?.name || "script")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    const content = `\ufeff${script}`.replace(/\n/g, "\r\n");
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `TechHub-ADFS-${baseName || "script"}.ps1`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   useEffect(() => { if (projectId) loadProject(projectId); }, [projectId]);
 
   function resetProjectForm() {
@@ -1368,7 +1387,10 @@ export default function AdFsPage() {
           <section className="mt-6 p-4 bg-card border border-border rounded shadow">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Script PowerShell (preview)</h2>
-              <button onClick={() => loadProject(projectId)} className="px-3 py-2 rounded border">Atualizar</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => loadProject(projectId)} className="px-3 py-2 rounded border">Atualizar</button>
+                <button onClick={downloadPs1} className="px-3 py-2 rounded border" disabled={!script}>Download</button>
+              </div>
             </div>
             <textarea value={script} readOnly className="mt-3 w-full h-80 px-3 py-2 border rounded font-mono text-xs" />
           </section>

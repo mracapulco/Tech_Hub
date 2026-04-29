@@ -4,6 +4,25 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.4.1] — 2026-04-28
+
+### Adicionado
+- Gestão • AD / File Server: botão “Download” no preview exporta o script `.ps1` em UTF-8 com BOM (compatível com Windows PowerShell).
+- Script PowerShell (AD / File Server): funções `Ensure-*` para criação idempotente de OUs, grupos, usuários e memberships.
+- Script PowerShell (AD / File Server): inclusão automática de `Administrators`, `SYSTEM` e `CREATOR OWNER` com acesso total nas pastas gerenciadas.
+- Script PowerShell (AD / File Server): encadeamento de grupos (GA_ → GF_ → GF_ da raiz) para navegação e acesso efetivo na hierarquia.
+
+### Alterado
+- Script PowerShell (AD / File Server): grupos `GF_` passam a aplicar permissões como “Somente nesta pasta” (sem herança).
+- Script PowerShell (AD / File Server): criação de usuários passa a respeitar o limite de 20 caracteres do `SamAccountName`, mantendo `UPN` com domínio.
+
+### Corrigido
+- Script PowerShell (AD / File Server): execução repetida não tenta recriar objetos do AD já existentes.
+- Script PowerShell (AD / File Server): problemas de acentuação em nomes ao executar o `.ps1` no Windows PowerShell.
+
+### Operacional
+- Versões atualizadas: root e web `0.4.1`.
+
 ## [0.3.21] — 2026-04-27
 
 ### Adicionado

@@ -377,7 +377,20 @@ export class AdfsService {
     return { deleted: true, deletedGroups: deletableGroupIds.length, keptGroups: lockedGroupIds.size };
   }
 
-  addFolderPermission(data: { folderNodeId: string; groupId: string; permission: string; appliesTo?: string; deny?: boolean }) {
+  async addFolderPermission(data: { folderNodeId: string; groupId: string; permission: string; appliesTo?: string; deny?: boolean }) {
+    if (String(data.permission || '') === 'LG' && !data.deny) {
+      const existingLg = await this.prisma.adFsFolderPermission.findFirst({
+        where: {
+          folderNodeId: String(data.folderNodeId),
+          permission: 'LG' as any,
+          deny: false,
+        },
+        include: { group: { select: { name: true } } },
+      });
+      if (existingLg) {
+        throw new Error(`Esta pasta já possui um grupo LG definido como proprietário: ${existingLg.group.name}.`);
+      }
+    }
     return this.prisma.adFsFolderPermission.create({
       data: {
         folderNodeId: String(data.folderNodeId),
@@ -472,10 +485,23 @@ export class AdfsService {
     const fileServerOuDn = `OU=FILESERVER,${rootOuDn}`;
     const sectorsOuDn = `OU=SETORES,${rootOuDn}`;
 
-    const ouLines = project.ouNodes.map((o) => {
-      const path = o.parentId ? (ouMap.get(o.parentId)?.distinguishedName || domainDn) : domainDn;
-      return `New-ADOrganizationalUnit -Name "${o.name}" -Path "${path}" -ProtectedFromAccidentalDeletion $false`;
-    });
+    const psEscape = (value: any) => String(value ?? '').replace(/"/g, '""');
+
+    const rootFolderName = (() => {
+      const cleaned = String(rootPath).replace(/[\\/]+$/g, '');
+      const parts = cleaned.split(/[\\/]/g).filter(Boolean);
+      const last = parts[parts.length - 1] || 'FILESERVER';
+      return last.replace(/:$/, '') || 'FILESERVER';
+    })();
+
+    const rootGfName = `GF_${this.sanitizeName(rootFolderName)}`;
+
+    const allGroupNames = new Set<string>(project.groups.map((g) => g.name));
+    allGroupNames.add(rootGfName);
+
+    const topLevelFolders = project.folders.filter((f) => !f.parentId);
+    const topLevelGfNames = topLevelFolders.map((f) => `GF_${this.sanitizeName(f.name)}`);
+    for (const gfName of topLevelGfNames) allGroupNames.add(gfName);
 
     const orgLines = [...project.orgNodes]
       .sort((a, b) => {
@@ -490,34 +516,67 @@ export class AdfsService {
         };
         return depth(a) - depth(b) || a.name.localeCompare(b.name);
       })
-      .map((node) => `New-ADOrganizationalUnit -Name "${node.name}" -Path "${this.buildOrgOuPath(node, orgMap, sectorsOuDn)}" -ProtectedFromAccidentalDeletion $false`);
+      .map((node) => `Ensure-TechHubOu -Name "${psEscape(node.name)}" -Path "${psEscape(this.buildOrgOuPath(node, orgMap, sectorsOuDn))}"`);
 
-    const groupLines = project.groups.map((g) => {
-      const scope = g.kind === 'GF' ? 'Global' : 'Global';
-      return `New-ADGroup -Name "${g.name}" -SamAccountName "${g.name}" -GroupScope ${scope} -GroupCategory Security -Path "${fileServerOuDn}"`;
+    const ouLines = project.ouNodes.map((o) => {
+      const path = o.parentId ? (ouMap.get(o.parentId)?.distinguishedName || domainDn) : domainDn;
+      return `Ensure-TechHubOu -Name "${psEscape(o.name)}" -Path "${psEscape(path)}"`;
     });
+
+    const groupLines = [
+      ...Array.from(allGroupNames)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => `Ensure-TechHubAdGroup -Name "${psEscape(name)}" -Path "${psEscape(fileServerOuDn)}"`),
+    ];
+
+    const groupNestingLines: string[] = [];
+    for (const gfName of topLevelGfNames) {
+      groupNestingLines.push(`Ensure-TechHubAdGroupInclude -Parent "${psEscape(rootGfName)}" -Child "${psEscape(gfName)}"`);
+    }
+    const topFolderOf = (folder: any): any => {
+      let current = folder;
+      while (current?.parentId) {
+        const parent = folderMap.get(current.parentId);
+        if (!parent) break;
+        current = parent;
+      }
+      return current;
+    };
+    for (const folder of project.folders) {
+      const top = topFolderOf(folder);
+      if (!top?.id) continue;
+      const parentGf = `GF_${this.sanitizeName(top.name)}`;
+      for (const perm of folder.permissions || []) {
+        if (perm?.group?.kind === 'GA') {
+          groupNestingLines.push(`Ensure-TechHubAdGroupInclude -Parent "${psEscape(parentGf)}" -Child "${psEscape(perm.group.name)}"`);
+        }
+      }
+    }
 
     const userLines = project.users.flatMap((u) => {
       const orgNode = u.orgNodeId ? orgMap.get(u.orgNodeId) : null;
       const targetOu = orgNode ? `OU=${orgNode.name},${this.buildOrgOuPath(orgNode, orgMap, sectorsOuDn)}` : sectorsOuDn;
       const password = u.initialPassword || 'Temp@123456';
-      const lines = [
-        `# Senha inicial de ${u.username}: ${password}`,
-      ];
+      const sam = String(u.username || '').slice(0, 20);
+      const lines: string[] = [];
       lines.push(
-        `New-ADUser -Name "${u.fullName}" -GivenName "${u.firstName}" -Surname "${u.lastName || ''}" -SamAccountName "${u.username}" -UserPrincipalName "${u.username}@${project.domainName || 'example.local'}" -Path "${targetOu}" -EmailAddress "${u.email || ''}" -Title "${u.title || ''}" -AccountPassword (ConvertTo-SecureString "${password}" -AsPlainText -Force) -Enabled $true`,
+        `Ensure-TechHubAdUser -Name "${psEscape(u.fullName)}" -GivenName "${psEscape(u.firstName)}" -Surname "${psEscape(u.lastName || '')}" -SamAccountName "${psEscape(sam)}" -UserPrincipalName "${psEscape(String(u.username || ''))}@${psEscape(project.domainName || 'example.local')}" -Path "${psEscape(targetOu)}" -EmailAddress "${psEscape(u.email || '')}" -Title "${psEscape(u.title || '')}" -Password "${psEscape(password)}"`,
       );
-      for (const g of u.groups) lines.push(`Add-ADGroupMember -Identity "${g.name}" -Members "${u.username}"`);
+      for (const g of u.groups) lines.push(`Ensure-TechHubAdGroupInclude -Parent "${psEscape(g.name)}" -Child "${psEscape(sam)}"`);
       return lines;
     });
 
     const folderLines = project.folders.flatMap((f) => {
       const path = this.buildFolderPath(f, folderMap, rootPath);
-      const lines = [`New-Item -ItemType Directory -Force -Path "${path}" | Out-Null`];
-      if (f.disableInheritance) lines.push(`icacls "${path}" /inheritance:d | Out-Null`);
+      const lines: string[] = [`Ensure-TechHubFolder -Path "${psEscape(path)}"`];
+      if (f.disableInheritance) lines.push(`Ensure-TechHubDisableInheritance -Path "${psEscape(path)}" -Mode "d"`);
+      lines.push(`Ensure-TechHubAdministratorsFullControl -Path "${psEscape(path)}"`);
+      lines.push(`Ensure-TechHubSystemFullControl -Path "${psEscape(path)}"`);
+      lines.push(`Ensure-TechHubCreatorOwnerFullControl -Path "${psEscape(path)}"`);
       for (const p of f.permissions) {
         const permMap: Record<string, string> = { L: 'R', LG: 'M', LE: 'RX', FULL: 'F' };
-        lines.push(`icacls "${path}" /grant "${p.group.name}:(${permMap[p.permission] || 'R'})" | Out-Null`);
+        const right = permMap[p.permission] || 'R';
+        lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "${right}" -AppliesTo "${psEscape(p.appliesTo || 'ThisFolderSubfoldersAndFiles')}" -Deny:$${p.deny ? 'true' : 'false'}`);
       }
       return lines;
     });
@@ -530,8 +589,106 @@ export class AdfsService {
       ].join('\n');
     });
 
+    const functions = [
+      'function Ensure-TechHubOu {',
+      '  param([string]$Name,[string]$Path)',
+      '  try {',
+      '    $found = Get-ADOrganizationalUnit -Filter "Name -eq \\"$Name\\"" -SearchBase $Path -ErrorAction Stop | Select-Object -First 1',
+      '    if ($found) { return }',
+      '  } catch { }',
+      '  try { New-ADOrganizationalUnit -Name $Name -Path $Path -ProtectedFromAccidentalDeletion $false -ErrorAction Stop | Out-Null } catch { }',
+      '}',
+      '',
+      'function Ensure-TechHubAdGroup {',
+      '  param([string]$Name,[string]$Path)',
+      '  try { $g = Get-ADGroup -Identity $Name -ErrorAction Stop; if ($g) { return } } catch { }',
+      '  try { New-ADGroup -Name $Name -SamAccountName $Name -GroupScope Global -GroupCategory Security -Path $Path -ErrorAction Stop | Out-Null } catch { }',
+      '}',
+      '',
+      'function Ensure-TechHubAdUser {',
+      '  param(',
+      '    [string]$Name,',
+      '    [string]$GivenName,',
+      '    [string]$Surname,',
+      '    [string]$SamAccountName,',
+      '    [string]$UserPrincipalName,',
+      '    [string]$Path,',
+      '    [string]$EmailAddress,',
+      '    [string]$Title,',
+      '    [string]$Password',
+      '  )',
+      '  try { $u = Get-ADUser -Identity $SamAccountName -ErrorAction Stop; if ($u) { return } } catch { }',
+      '  try {',
+      '    $secure = ConvertTo-SecureString $Password -AsPlainText -Force',
+      '    New-ADUser -Name $Name -GivenName $GivenName -Surname $Surname -SamAccountName $SamAccountName -UserPrincipalName $UserPrincipalName -Path $Path -EmailAddress $EmailAddress -Title $Title -AccountPassword $secure -Enabled $true -ErrorAction Stop | Out-Null',
+      '  } catch { }',
+      '}',
+      '',
+      'function Ensure-TechHubAdGroupInclude {',
+      '  param([string]$Parent,[string]$Child)',
+      '  try {',
+      '    $list = Get-ADGroupMember -Identity $Parent -Recursive:$false -ErrorAction Stop | Select-Object -ExpandProperty SamAccountName',
+      '    if ($list -contains $Child) { return }',
+      '  } catch { }',
+      '  try { Add-ADGroupMember -Identity $Parent -Members $Child -ErrorAction Stop } catch { }',
+      '}',
+      '',
+      'function Ensure-TechHubFolder {',
+      '  param([string]$Path)',
+      '  try { New-Item -ItemType Directory -Force -Path $Path | Out-Null } catch { }',
+      '}',
+      '',
+      'function Ensure-TechHubDisableInheritance {',
+      '  param([string]$Path,[ValidateSet("d","r")][string]$Mode)',
+      '  try { icacls $Path /inheritance:$Mode | Out-Null } catch { }',
+      '}',
+      '',
+      'function Convert-TechHubAppliesTo {',
+      '  param([string]$AppliesTo)',
+      '  switch ($AppliesTo) {',
+      '    "ThisFolderOnly" { return "" }',
+      '    "ThisFolderSubfoldersAndFiles" { return "(OI)(CI)" }',
+      '    "ThisFolderSubfoldersOnly" { return "(CI)" }',
+      '    "ThisFolderFilesOnly" { return "(OI)" }',
+      '    "SubfoldersAndFilesOnly" { return "(OI)(CI)(IO)" }',
+      '    default { return "(OI)(CI)" }',
+      '  }',
+      '}',
+      '',
+      'function Ensure-TechHubFolderPermission {',
+      '  param(',
+      '    [string]$Path,',
+      '    [string]$Identity,',
+      '    [string]$Right,',
+      '    [string]$AppliesTo = "ThisFolderSubfoldersAndFiles",',
+      '    [switch]$Deny',
+      '  )',
+      '  $flags = Convert-TechHubAppliesTo -AppliesTo $AppliesTo',
+      '  $ace = if ([string]::IsNullOrWhiteSpace($flags)) { "$Identity:($Right)" } else { "$Identity:$flags($Right)" }',
+      '  try {',
+      '    if ($Deny) { icacls $Path /deny $ace | Out-Null } else { icacls $Path /grant:r $ace | Out-Null }',
+      '  } catch { }',
+      '}',
+      '',
+      'function Ensure-TechHubAdministratorsFullControl {',
+      '  param([string]$Path)',
+      '  Ensure-TechHubFolderPermission -Path $Path -Identity "BUILTIN\\Administrators" -Right "F" -AppliesTo "ThisFolderSubfoldersAndFiles"',
+      '}',
+      '',
+      'function Ensure-TechHubSystemFullControl {',
+      '  param([string]$Path)',
+      '  Ensure-TechHubFolderPermission -Path $Path -Identity "SYSTEM" -Right "F" -AppliesTo "ThisFolderSubfoldersAndFiles"',
+      '}',
+      '',
+      'function Ensure-TechHubCreatorOwnerFullControl {',
+      '  param([string]$Path)',
+      '  Ensure-TechHubFolderPermission -Path $Path -Identity "CREATOR OWNER" -Right "F" -AppliesTo "SubfoldersAndFilesOnly"',
+      '}',
+    ].join('\n');
+
     const script = [
       '# Tech Hub - AD / File Server V1',
+      functions,
       `$ProjectName = "${project.name}"`,
       `$DomainDn = "${domainDn}"`,
       `$RootOuName = "${rootOuName}"`,
@@ -541,9 +698,9 @@ export class AdfsService {
       `$RootPath = "${rootPath}"`,
       '',
       '# Estrutura raiz do projeto no AD',
-      `New-ADOrganizationalUnit -Name "${rootOuName}" -Path "${domainDn}" -ProtectedFromAccidentalDeletion $false`,
-      `New-ADOrganizationalUnit -Name "SETORES" -Path "${rootOuDn}" -ProtectedFromAccidentalDeletion $false`,
-      `New-ADOrganizationalUnit -Name "FILESERVER" -Path "${rootOuDn}" -ProtectedFromAccidentalDeletion $false`,
+      `Ensure-TechHubOu -Name "${psEscape(rootOuName)}" -Path "${psEscape(domainDn)}"`,
+      `Ensure-TechHubOu -Name "SETORES" -Path "${psEscape(rootOuDn)}"`,
+      `Ensure-TechHubOu -Name "FILESERVER" -Path "${psEscape(rootOuDn)}"`,
       '',
       '# Estrutura organizacional',
       ...orgLines,
@@ -554,10 +711,19 @@ export class AdfsService {
       '# Grupos',
       ...groupLines,
       '',
+      '# Inclusões (nesting)',
+      ...groupNestingLines,
+      '',
       '# Usuarios',
       ...userLines,
       '',
       '# Pastas e permissoes',
+      `Ensure-TechHubFolder -Path "$RootPath"`,
+      `Ensure-TechHubDisableInheritance -Path "$RootPath" -Mode "r"`,
+      `Ensure-TechHubAdministratorsFullControl -Path "$RootPath"`,
+      `Ensure-TechHubSystemFullControl -Path "$RootPath"`,
+      `Ensure-TechHubCreatorOwnerFullControl -Path "$RootPath"`,
+      `Ensure-TechHubFolderPermission -Path "$RootPath" -Identity "${psEscape(rootGfName)}" -Right "RX" -AppliesTo "ThisFolderOnly"`,
       ...folderLines,
       '',
       '# GPOs',
