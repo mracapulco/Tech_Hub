@@ -24,8 +24,9 @@ export class AdfsController {
       const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
       const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
       const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+      const isClient = memberships.some((m: any) => m.role === 'CLIENT');
       const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      return { ok: true, isAdmin, isTechnician, allowedCompanyIds } as const;
+      return { ok: true, isAdmin, isTechnician, isClient, allowedCompanyIds } as const;
     } catch {
       return { ok: false, error: 'Invalid token' } as const;
     }
@@ -101,7 +102,7 @@ export class AdfsController {
   async createOrgNode(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const access = await this.canAccessProject(String(body?.projectId || ''), ctx);
     if (!access.ok) return access;
     const data = await this.svc.createOrgNode(body);
@@ -122,7 +123,7 @@ export class AdfsController {
   async updateOrgNode(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const node = await this.prisma.adFsOrgNode.findUnique({ where: { id }, select: { projectId: true } });
     if (!node) return { ok: false, error: 'Item não encontrado' };
     const access = await this.canAccessProject(node.projectId, ctx);
@@ -135,7 +136,7 @@ export class AdfsController {
   async deleteOrgNode(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const node = await this.prisma.adFsOrgNode.findUnique({ where: { id }, select: { projectId: true } });
     if (!node) return { ok: false, error: 'Item não encontrado' };
     const access = await this.canAccessProject(node.projectId, ctx);
@@ -173,7 +174,7 @@ export class AdfsController {
   async createGroup(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const access = await this.canAccessProject(String(body?.projectId || ''), ctx);
     if (!access.ok) return access;
     const data = await this.svc.createGroup(body);
@@ -194,7 +195,7 @@ export class AdfsController {
   async updateGroup(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const group = await this.prisma.adFsGroup.findUnique({ where: { id }, select: { projectId: true } });
     if (!group) return { ok: false, error: 'Grupo não encontrado' };
     const access = await this.canAccessProject(group.projectId, ctx);
@@ -219,7 +220,7 @@ export class AdfsController {
   async deleteGroup(@Param('id') id: string, @Query('force') force: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const group = await this.prisma.adFsGroup.findUnique({ where: { id }, select: { projectId: true } });
     if (!group) return { ok: false, error: 'Grupo não encontrado' };
     const access = await this.canAccessProject(group.projectId, ctx);
@@ -236,7 +237,7 @@ export class AdfsController {
   async createUser(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const access = await this.canAccessProject(String(body?.projectId || ''), ctx);
     if (!access.ok) return access;
     const data = await this.svc.createUser(body);
@@ -257,7 +258,7 @@ export class AdfsController {
   async updateUser(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const user = await this.prisma.adFsUserPlan.findUnique({ where: { id }, select: { projectId: true } });
     if (!user) return { ok: false, error: 'Usuário não encontrado' };
     const access = await this.canAccessProject(user.projectId, ctx);
@@ -270,7 +271,7 @@ export class AdfsController {
   async deleteUser(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const user = await this.prisma.adFsUserPlan.findUnique({ where: { id }, select: { projectId: true } });
     if (!user) return { ok: false, error: 'Usuário não encontrado' };
     const access = await this.canAccessProject(user.projectId, ctx);
@@ -283,7 +284,7 @@ export class AdfsController {
   async createFolder(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const access = await this.canAccessProject(String(body?.projectId || ''), ctx);
     if (!access.ok) return access;
     const data = await this.svc.createFolder(body);
@@ -304,7 +305,7 @@ export class AdfsController {
   async updateFolder(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const folder = await this.prisma.adFsFolderNode.findUnique({ where: { id }, select: { projectId: true } });
     if (!folder) return { ok: false, error: 'Pasta não encontrada' };
     const access = await this.canAccessProject(folder.projectId, ctx);
@@ -317,7 +318,7 @@ export class AdfsController {
   async deleteFolder(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const folder = await this.prisma.adFsFolderNode.findUnique({ where: { id }, select: { projectId: true } });
     if (!folder) return { ok: false, error: 'Pasta não encontrada' };
     const access = await this.canAccessProject(folder.projectId, ctx);
@@ -330,7 +331,7 @@ export class AdfsController {
   async createFolderPermission(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const folder = await this.prisma.adFsFolderNode.findUnique({ where: { id: String(body?.folderNodeId || '') }, select: { projectId: true } });
     if (!folder) return { ok: false, error: 'Pasta não encontrada' };
     const access = await this.canAccessProject(folder.projectId, ctx);
@@ -347,7 +348,7 @@ export class AdfsController {
   async deleteFolderPermission(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
-    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
     const permission = await this.prisma.adFsFolderPermission.findUnique({ where: { id }, include: { folderNode: { select: { projectId: true } } } });
     if (!permission) return { ok: false, error: 'Permissão não encontrada' };
     const access = await this.canAccessProject(permission.folderNode.projectId, ctx);
@@ -381,6 +382,7 @@ export class AdfsController {
   async script(@Param('projectId') projectId: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
     if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
     const access = await this.canAccessProject(projectId, ctx);
     if (!access.ok) return access;
     const data = await this.svc.generateScript(projectId);

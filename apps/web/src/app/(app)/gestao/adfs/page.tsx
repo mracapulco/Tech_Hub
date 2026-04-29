@@ -46,6 +46,7 @@ export default function AdFsPage() {
   const [users, setUsers] = useState<UserPlan[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [script, setScript] = useState<string>("");
+  const [canViewScript, setCanViewScript] = useState(true);
 
   const [pName, setPName] = useState("");
   const [pDomain, setPDomain] = useState("");
@@ -144,6 +145,7 @@ export default function AdFsPage() {
     if (!token || !pid) return;
     setLoading(true);
     setError(null);
+    setCanViewScript(true);
     try {
       const d = await apiGet<{ ok: boolean; data?: any; error?: string }>(`/adfs/projects/${pid}`, token);
       if (!d?.ok) {
@@ -157,10 +159,17 @@ export default function AdFsPage() {
       setFolders(p?.folders || []);
       const s = await apiGet<{ ok: boolean; data?: { script: string }; error?: string }>(`/adfs/script/${pid}`, token);
       if (!s?.ok) {
-        setError(s?.error || "Falha ao gerar script.");
-        return;
+        if ((s?.error || "") === "Forbidden") {
+          setCanViewScript(false);
+          setScript("");
+        } else {
+          setError(s?.error || "Falha ao gerar script.");
+          return;
+        }
+      } else {
+        setCanViewScript(true);
+        setScript(s?.data?.script || "");
       }
-      setScript(s?.data?.script || "");
     } catch {
       setError("Falha ao carregar projeto.");
     } finally {
@@ -1384,16 +1393,18 @@ export default function AdFsPage() {
             </section>
           </div>
 
-          <section className="mt-6 p-4 bg-card border border-border rounded shadow">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Script PowerShell (preview)</h2>
-              <div className="flex items-center gap-2">
-                <button onClick={() => loadProject(projectId)} className="px-3 py-2 rounded border">Atualizar</button>
-                <button onClick={downloadPs1} className="px-3 py-2 rounded border" disabled={!script}>Download</button>
+          {canViewScript && (
+            <section className="mt-6 p-4 bg-card border border-border rounded shadow">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold">Script PowerShell (preview)</h2>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => loadProject(projectId)} className="px-3 py-2 rounded border">Atualizar</button>
+                  <button onClick={downloadPs1} className="px-3 py-2 rounded border" disabled={!script}>Download</button>
+                </div>
               </div>
-            </div>
-            <textarea value={script} readOnly className="mt-3 w-full h-80 px-3 py-2 border rounded font-mono text-xs" />
-          </section>
+              <textarea value={script} readOnly className="mt-3 w-full h-80 px-3 py-2 border rounded font-mono text-xs" />
+            </section>
+          )}
         </>
       )}
     </main>
