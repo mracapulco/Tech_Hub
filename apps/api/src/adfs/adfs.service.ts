@@ -9,7 +9,7 @@ export class AdfsService {
     return this.prisma.adFsProject.findMany({ where: { companyId }, orderBy: { createdAt: 'desc' } });
   }
 
-  createProject(data: { companyId: string; name: string; description?: string; domainName?: string; rootOuName?: string; rootPath?: string }) {
+  createProject(data: { companyId: string; name: string; description?: string; domainName?: string; rootOuName?: string; rootPath?: string; userHomeDriveLetter?: string; userHomeLocalRoot?: string; userHomeShareRoot?: string }) {
     return this.prisma.adFsProject.create({
       data: {
         companyId: String(data.companyId),
@@ -18,11 +18,14 @@ export class AdfsService {
         domainName: data.domainName || undefined,
         rootOuName: data.rootOuName || undefined,
         rootPath: data.rootPath || undefined,
+        userHomeDriveLetter: data.userHomeDriveLetter || undefined,
+        userHomeLocalRoot: data.userHomeLocalRoot || undefined,
+        userHomeShareRoot: data.userHomeShareRoot || undefined,
       },
     });
   }
 
-  updateProject(id: string, data: { name?: string; description?: string | null; domainName?: string | null; rootOuName?: string | null; rootPath?: string | null; status?: string }) {
+  updateProject(id: string, data: { name?: string; description?: string | null; domainName?: string | null; rootOuName?: string | null; rootPath?: string | null; userHomeDriveLetter?: string | null; userHomeLocalRoot?: string | null; userHomeShareRoot?: string | null; status?: string }) {
     return this.prisma.adFsProject.update({
       where: { id },
       data: {
@@ -31,6 +34,9 @@ export class AdfsService {
         domainName: data.domainName === null ? null : (data.domainName || undefined),
         rootOuName: data.rootOuName === null ? null : (data.rootOuName || undefined),
         rootPath: data.rootPath ? String(data.rootPath) : undefined,
+        userHomeDriveLetter: data.userHomeDriveLetter === null ? null : (data.userHomeDriveLetter || undefined),
+        userHomeLocalRoot: data.userHomeLocalRoot === null ? null : (data.userHomeLocalRoot || undefined),
+        userHomeShareRoot: data.userHomeShareRoot === null ? null : (data.userHomeShareRoot || undefined),
         status: data.status ? (data.status as any) : undefined,
       },
     });
@@ -237,7 +243,7 @@ export class AdfsService {
     return { deleted: true, forced: force };
   }
 
-  async createUser(data: { projectId: string; orgNodeId?: string; ouNodeId?: string; fullName: string; firstName: string; lastName?: string; username: string; email?: string; title?: string; initialPassword?: string; groupIds?: string[] }) {
+  async createUser(data: { projectId: string; orgNodeId?: string; ouNodeId?: string; fullName: string; firstName: string; lastName?: string; username: string; email?: string; title?: string; initialPassword?: string; homeDriveEnabled?: boolean; homeDriveLetter?: string | null; groupIds?: string[] }) {
     return this.prisma.adFsUserPlan.create({
       data: {
         projectId: String(data.projectId),
@@ -250,6 +256,8 @@ export class AdfsService {
         email: data.email || undefined,
         title: data.title || undefined,
         initialPassword: data.initialPassword || undefined,
+        homeDriveEnabled: data.homeDriveEnabled != null ? Boolean(data.homeDriveEnabled) : false,
+        homeDriveLetter: data.homeDriveLetter === null ? null : (data.homeDriveLetter || undefined),
         groups: data.groupIds?.length ? { connect: data.groupIds.map((id) => ({ id })) } : undefined,
       },
       include: { groups: true },
@@ -260,7 +268,7 @@ export class AdfsService {
     return this.prisma.adFsUserPlan.findMany({ where: { projectId }, include: { groups: true }, orderBy: { fullName: 'asc' } });
   }
 
-  async updateUser(id: string, data: { orgNodeId?: string | null; ouNodeId?: string | null; fullName?: string; firstName?: string; lastName?: string | null; username?: string; email?: string | null; title?: string | null; initialPassword?: string | null; groupIds?: string[] }) {
+  async updateUser(id: string, data: { orgNodeId?: string | null; ouNodeId?: string | null; fullName?: string; firstName?: string; lastName?: string | null; username?: string; email?: string | null; title?: string | null; initialPassword?: string | null; homeDriveEnabled?: boolean; homeDriveLetter?: string | null; groupIds?: string[] }) {
     return this.prisma.adFsUserPlan.update({
       where: { id },
       data: {
@@ -273,6 +281,8 @@ export class AdfsService {
         email: data.email === null ? null : (data.email || undefined),
         title: data.title === null ? null : (data.title || undefined),
         initialPassword: data.initialPassword === null ? null : (data.initialPassword || undefined),
+        homeDriveEnabled: data.homeDriveEnabled != null ? Boolean(data.homeDriveEnabled) : undefined,
+        homeDriveLetter: data.homeDriveLetter === null ? null : (data.homeDriveLetter || undefined),
         groups: data.groupIds ? { set: data.groupIds.map((groupId) => ({ id: groupId })) } : undefined,
       },
       include: { groups: true },
@@ -479,6 +489,9 @@ export class AdfsService {
     const orgMap = new Map(project.orgNodes.map((o) => [o.id, o]));
     const folderMap = new Map(project.folders.map((f) => [f.id, f]));
     const rootPath = project.rootPath || 'D:\\FILESERVER';
+    const userHomeDriveLetter = (project as any).userHomeDriveLetter || 'U';
+    const userHomeLocalRoot = (project as any).userHomeLocalRoot || '';
+    const userHomeShareRoot = (project as any).userHomeShareRoot || '';
     const domainDn = this.domainToDn(project.domainName);
     const rootOuName = project.rootOuName || 'EMPRESA';
     const rootOuDn = `OU=${rootOuName},${domainDn}`;
@@ -553,15 +566,27 @@ export class AdfsService {
       }
     }
 
-    const userLines = project.users.flatMap((u) => {
+    const userLines = project.users.flatMap((u: any) => {
       const orgNode = u.orgNodeId ? orgMap.get(u.orgNodeId) : null;
       const targetOu = orgNode ? `OU=${orgNode.name},${this.buildOrgOuPath(orgNode, orgMap, sectorsOuDn)}` : sectorsOuDn;
       const password = u.initialPassword || 'Temp@123456';
       const sam = String(u.username || '').slice(0, 20);
       const lines: string[] = [];
-      lines.push(
-        `Ensure-TechHubAdUser -Name "${psEscape(u.fullName)}" -GivenName "${psEscape(u.firstName)}" -Surname "${psEscape(u.lastName || '')}" -SamAccountName "${psEscape(sam)}" -UserPrincipalName "${psEscape(String(u.username || ''))}@${psEscape(project.domainName || 'example.local')}" -Path "${psEscape(targetOu)}" -EmailAddress "${psEscape(u.email || '')}" -Title "${psEscape(u.title || '')}" -Password "${psEscape(password)}"`,
-      );
+      if (u.homeDriveEnabled) {
+        const driveLetter = String(u.homeDriveLetter || userHomeDriveLetter || 'U').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 1) || 'U';
+        lines.push(`$TechHubHomeDrive = "${psEscape(driveLetter)}:"`);
+        lines.push(`if ([string]::IsNullOrWhiteSpace($UserHomeLocalRoot) -or [string]::IsNullOrWhiteSpace($UserHomeShareRoot)) { throw "Configuração de pasta pessoal ausente no projeto." }`);
+        lines.push(`$TechHubHomeLocal = Join-TechHubPath -Base $UserHomeLocalRoot -Child "${psEscape(sam)}"`);
+        lines.push(`$TechHubHomeShare = Join-TechHubPath -Base $UserHomeShareRoot -Child "${psEscape(sam)}"`);
+        lines.push(`Ensure-TechHubUserHomeFolder -Path $TechHubHomeLocal -Owner "${psEscape(sam)}"`);
+        lines.push(
+          `Ensure-TechHubAdUser -Name "${psEscape(u.fullName)}" -GivenName "${psEscape(u.firstName)}" -Surname "${psEscape(u.lastName || '')}" -SamAccountName "${psEscape(sam)}" -UserPrincipalName "${psEscape(String(u.username || ''))}@${psEscape(project.domainName || 'example.local')}" -Path "${psEscape(targetOu)}" -EmailAddress "${psEscape(u.email || '')}" -Title "${psEscape(u.title || '')}" -Password "${psEscape(password)}" -HomeDrive $TechHubHomeDrive -HomeDirectory $TechHubHomeShare`,
+        );
+      } else {
+        lines.push(
+          `Ensure-TechHubAdUser -Name "${psEscape(u.fullName)}" -GivenName "${psEscape(u.firstName)}" -Surname "${psEscape(u.lastName || '')}" -SamAccountName "${psEscape(sam)}" -UserPrincipalName "${psEscape(String(u.username || ''))}@${psEscape(project.domainName || 'example.local')}" -Path "${psEscape(targetOu)}" -EmailAddress "${psEscape(u.email || '')}" -Title "${psEscape(u.title || '')}" -Password "${psEscape(password)}"`,
+        );
+      }
       for (const g of u.groups) lines.push(`Ensure-TechHubAdGroupInclude -Parent "${psEscape(g.name)}" -Child "${psEscape(sam)}"`);
       return lines;
     });
@@ -615,13 +640,46 @@ export class AdfsService {
       '    [string]$Path,',
       '    [string]$EmailAddress,',
       '    [string]$Title,',
-      '    [string]$Password',
+      '    [string]$Password,',
+      '    [string]$HomeDrive = "",',
+      '    [string]$HomeDirectory = ""',
       '  )',
-      '  try { $u = Get-ADUser -Identity $SamAccountName -ErrorAction Stop; if ($u) { return } } catch { }',
+      '  $existing = $null',
+      '  try { $existing = Get-ADUser -Identity $SamAccountName -ErrorAction Stop } catch { }',
+      '  if ($existing) {',
+      '    if (!([string]::IsNullOrWhiteSpace($HomeDrive) -or [string]::IsNullOrWhiteSpace($HomeDirectory))) {',
+      '      try { Set-ADUser -Identity $SamAccountName -HomeDrive $HomeDrive -HomeDirectory $HomeDirectory -ErrorAction Stop } catch { }',
+      '    }',
+      '    return',
+      '  }',
       '  try {',
       '    $secure = ConvertTo-SecureString $Password -AsPlainText -Force',
-      '    New-ADUser -Name $Name -GivenName $GivenName -Surname $Surname -SamAccountName $SamAccountName -UserPrincipalName $UserPrincipalName -Path $Path -EmailAddress $EmailAddress -Title $Title -AccountPassword $secure -Enabled $true -ErrorAction Stop | Out-Null',
+      '    if ([string]::IsNullOrWhiteSpace($HomeDrive) -or [string]::IsNullOrWhiteSpace($HomeDirectory)) {',
+      '      New-ADUser -Name $Name -GivenName $GivenName -Surname $Surname -SamAccountName $SamAccountName -UserPrincipalName $UserPrincipalName -Path $Path -EmailAddress $EmailAddress -Title $Title -AccountPassword $secure -Enabled $true -ErrorAction Stop | Out-Null',
+      '    } else {',
+      '      New-ADUser -Name $Name -GivenName $GivenName -Surname $Surname -SamAccountName $SamAccountName -UserPrincipalName $UserPrincipalName -Path $Path -EmailAddress $EmailAddress -Title $Title -AccountPassword $secure -Enabled $true -HomeDrive $HomeDrive -HomeDirectory $HomeDirectory -ErrorAction Stop | Out-Null',
+      '    }',
       '  } catch { }',
+      '}',
+      '',
+      'function Join-TechHubPath {',
+      '  param([string]$Base,[string]$Child)',
+      '  $b = ($Base -replace "[\\\\/]+$","")',
+      '  $c = ($Child -replace "^[\\\\/]+","")',
+      '  if ([string]::IsNullOrWhiteSpace($b)) { return $c }',
+      '  if ([string]::IsNullOrWhiteSpace($c)) { return $b }',
+      '  return "$b\\$c"',
+      '}',
+      '',
+      'function Ensure-TechHubUserHomeFolder {',
+      '  param([string]$Path,[string]$Owner)',
+      '  Ensure-TechHubFolder -Path $Path',
+      '  Ensure-TechHubDisableInheritance -Path $Path -Mode "d"',
+      '  Ensure-TechHubAdministratorsFullControl -Path $Path',
+      '  Ensure-TechHubSystemFullControl -Path $Path',
+      '  Ensure-TechHubCreatorOwnerFullControl -Path $Path',
+      '  Ensure-TechHubFolderPermission -Path $Path -Identity $Owner -Right "F" -AppliesTo "ThisFolderSubfoldersAndFiles"',
+      '  try { icacls $Path /setowner $Owner /c | Out-Null } catch { }',
       '}',
       '',
       'function Ensure-TechHubAdGroupInclude {',
@@ -696,6 +754,9 @@ export class AdfsService {
       `$FileServerOuDn = "${fileServerOuDn}"`,
       `$SectorsOuDn = "${sectorsOuDn}"`,
       `$RootPath = "${rootPath}"`,
+      `$UserHomeDriveLetter = "${psEscape(userHomeDriveLetter)}"`,
+      `$UserHomeLocalRoot = "${psEscape(userHomeLocalRoot)}"`,
+      `$UserHomeShareRoot = "${psEscape(userHomeShareRoot)}"`,
       '',
       '# Estrutura raiz do projeto no AD',
       `Ensure-TechHubOu -Name "${psEscape(rootOuName)}" -Path "${psEscape(domainDn)}"`,

@@ -4,7 +4,18 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 
 type Company = { id: string; name: string; fantasyName?: string };
-type Project = { id: string; name: string; description?: string; domainName?: string; rootOuName?: string; rootPath: string; status: string };
+type Project = {
+  id: string;
+  name: string;
+  description?: string;
+  domainName?: string;
+  rootOuName?: string;
+  rootPath: string;
+  userHomeDriveLetter?: string | null;
+  userHomeLocalRoot?: string | null;
+  userHomeShareRoot?: string | null;
+  status: string;
+};
 type OrgNode = { id: string; parentId?: string; type: string; name: string };
 type OrgTreeNode = OrgNode & { children: OrgTreeNode[] };
 type Group = { id: string; kind: string; name: string; permission?: string };
@@ -17,6 +28,8 @@ type UserPlan = {
   email?: string;
   title?: string;
   initialPassword?: string | null;
+  homeDriveEnabled?: boolean;
+  homeDriveLetter?: string | null;
   groups: Group[];
   orgNode?: { id: string; parentId?: string; type: string; name: string } | null;
 };
@@ -52,6 +65,9 @@ export default function AdFsPage() {
   const [pDomain, setPDomain] = useState("");
   const [pRootOu, setPRootOu] = useState("");
   const [pRoot, setPRoot] = useState("D:\\FILESERVER");
+  const [pUserHomeDriveLetter, setPUserHomeDriveLetter] = useState("U");
+  const [pUserHomeLocalRoot, setPUserHomeLocalRoot] = useState("");
+  const [pUserHomeShareRoot, setPUserHomeShareRoot] = useState("");
 
   const [orgName, setOrgName] = useState("");
   const [selectedOrgId, setSelectedOrgId] = useState("");
@@ -69,6 +85,8 @@ export default function AdFsPage() {
   const [uGroupIds, setUGroupIds] = useState<string[]>([]);
   const [uHiddenGroupIds, setUHiddenGroupIds] = useState<string[]>([]);
   const [uOrgId, setUOrgId] = useState("");
+  const [uHomeEnabled, setUHomeEnabled] = useState(false);
+  const [uHomeDriveLetter, setUHomeDriveLetter] = useState("");
   const [editingUserId, setEditingUserId] = useState("");
   const userImportInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -132,11 +150,17 @@ export default function AdFsPage() {
       setPDomain(selectedProject.domainName || "");
       setPRootOu(selectedProject.rootOuName || "");
       setPRoot(selectedProject.rootPath || "D:\\FILESERVER");
+      setPUserHomeDriveLetter((selectedProject.userHomeDriveLetter || "U").toUpperCase());
+      setPUserHomeLocalRoot(selectedProject.userHomeLocalRoot || "");
+      setPUserHomeShareRoot(selectedProject.userHomeShareRoot || "");
     } else {
       setPName("");
       setPDomain("");
       setPRootOu("");
       setPRoot("D:\\FILESERVER");
+      setPUserHomeDriveLetter("U");
+      setPUserHomeLocalRoot("");
+      setPUserHomeShareRoot("");
     }
   }, [selectedProject]);
 
@@ -204,6 +228,9 @@ export default function AdFsPage() {
     setPDomain("");
     setPRootOu("");
     setPRoot("D:\\FILESERVER");
+    setPUserHomeDriveLetter("U");
+    setPUserHomeLocalRoot("");
+    setPUserHomeShareRoot("");
     setError(null);
   }
 
@@ -218,6 +245,9 @@ export default function AdFsPage() {
           domainName: pDomain || null,
           rootOuName: pRootOu || null,
           rootPath: pRoot || null,
+          userHomeDriveLetter: pUserHomeDriveLetter || null,
+          userHomeLocalRoot: pUserHomeLocalRoot || null,
+          userHomeShareRoot: pUserHomeShareRoot || null,
         });
         if (!r?.ok) setError(r?.error || "Falha ao atualizar projeto.");
         else await refreshProjects(companyId);
@@ -228,6 +258,9 @@ export default function AdFsPage() {
           domainName: pDomain || undefined,
           rootOuName: pRootOu || undefined,
           rootPath: pRoot || undefined,
+          userHomeDriveLetter: pUserHomeDriveLetter || undefined,
+          userHomeLocalRoot: pUserHomeLocalRoot || undefined,
+          userHomeShareRoot: pUserHomeShareRoot || undefined,
         });
         if (r?.ok) {
           await refreshProjects(companyId);
@@ -766,6 +799,8 @@ export default function AdFsPage() {
     setUGroupIds(user.groups.filter((group) => group.kind === "GA" && group.name.startsWith("GA_")).map((group) => group.id));
     setUHiddenGroupIds(user.groups.filter((group) => !(group.kind === "GA" && group.name.startsWith("GA_"))).map((group) => group.id));
     setUOrgId(user.orgNode?.id || "");
+    setUHomeEnabled(Boolean(user.homeDriveEnabled));
+    setUHomeDriveLetter((user.homeDriveLetter || "").toUpperCase());
   }
 
   function resetUserForm() {
@@ -781,6 +816,8 @@ export default function AdFsPage() {
     setUGroupIds([]);
     setUHiddenGroupIds([]);
     setUOrgId("");
+    setUHomeEnabled(false);
+    setUHomeDriveLetter("");
   }
 
   async function submitUser() {
@@ -799,6 +836,8 @@ export default function AdFsPage() {
       email: uEmail || null,
       title: uTitle || null,
       initialPassword: uInitialPassword || null,
+      homeDriveEnabled: Boolean(uHomeEnabled),
+      homeDriveLetter: uHomeEnabled ? ((uHomeDriveLetter || "").toUpperCase() || null) : null,
       groupIds: [...uHiddenGroupIds, ...uGroupIds],
     };
     if (editingUserId) await putAndReload(`/adfs/users/${editingUserId}`, body);
@@ -1071,6 +1110,20 @@ export default function AdFsPage() {
             A estrutura organizacional sera criada no AD em `OU=SETORES,OU={pRootOu || "OU_RAIZ"},DC=...` e os grupos `GF_` e `GA_` em `OU=FILESERVER,OU={pRootOu || "OU_RAIZ"},DC=...`
           </div>
         </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+          <div>
+            <label className="text-sm">Letra padrão (pasta pessoal)</label>
+            <input value={pUserHomeDriveLetter} onChange={(e) => setPUserHomeDriveLetter(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="U" />
+          </div>
+          <div>
+            <label className="text-sm">Caminho local (pasta pessoal)</label>
+            <input value={pUserHomeLocalRoot} onChange={(e) => setPUserHomeLocalRoot(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="D:\\HOME\\USUARIOS" />
+          </div>
+          <div>
+            <label className="text-sm">Caminho compartilhado (pasta pessoal)</label>
+            <input value={pUserHomeShareRoot} onChange={(e) => setPUserHomeShareRoot(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="\\\\ad.exemplo.local\\usuario$" />
+          </div>
+        </div>
       </div>
 
       {projectId && (
@@ -1161,6 +1214,19 @@ export default function AdFsPage() {
                   <option value="">Setor</option>
                   {orgSelectOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                 </select>
+                <div className="flex items-center gap-3 px-3 py-2 border rounded">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={uHomeEnabled} onChange={(e) => setUHomeEnabled(e.target.checked)} />
+                    Pasta pessoal (conectar)
+                  </label>
+                  <input
+                    value={uHomeDriveLetter}
+                    onChange={(e) => setUHomeDriveLetter(e.target.value)}
+                    className="w-20 px-3 py-2 border rounded"
+                    placeholder={pUserHomeDriveLetter || "U"}
+                    disabled={!uHomeEnabled}
+                  />
+                </div>
                 <div className="md:col-span-3 text-xs text-gray-600 border rounded px-3 py-2 bg-gray-50">
                   {selectedUserOrgPath ? `Setor selecionado: ${selectedUserOrgPath}` : "Selecione o setor pela estrutura em arvore para evitar confusao entre nomes iguais."}
                 </div>

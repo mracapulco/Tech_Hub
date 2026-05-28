@@ -62,6 +62,9 @@ export class AdfsController {
       domainName: body?.domainName,
       rootOuName: body?.rootOuName,
       rootPath: body?.rootPath,
+      userHomeDriveLetter: body?.userHomeDriveLetter,
+      userHomeLocalRoot: body?.userHomeLocalRoot,
+      userHomeShareRoot: body?.userHomeShareRoot,
     });
     return { ok: true, data };
   }

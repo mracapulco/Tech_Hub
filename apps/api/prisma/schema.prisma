@@ -452,6 +452,9 @@ model AdFsProject {
   domainName  String?
   rootOuName  String?
   rootPath    String             @default("D:\\FILESERVER")
+  userHomeDriveLetter String?    @default("U")
+  userHomeLocalRoot   String?
+  userHomeShareRoot   String?
   status      AdFsProjectStatus  @default(DRAFT)
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
@@ -546,6 +549,8 @@ model AdFsUserPlan {
   title       String?
   enabled     Boolean      @default(true)
   initialPassword String?
+  homeDriveEnabled Boolean @default(false)
+  homeDriveLetter  String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
