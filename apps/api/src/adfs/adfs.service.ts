@@ -722,7 +722,7 @@ export class AdfsService {
       '    [switch]$Deny',
       '  )',
       '  $flags = Convert-TechHubAppliesTo -AppliesTo $AppliesTo',
-      '  $ace = if ([string]::IsNullOrWhiteSpace($flags)) { "$Identity:($Right)" } else { "$Identity:$flags($Right)" }',
+      '  $ace = if ([string]::IsNullOrWhiteSpace($flags)) { "${Identity}:($Right)" } else { "${Identity}:$flags($Right)" }',
       '  try {',
       '    if ($Deny) { icacls $Path /deny $ace | Out-Null } else { icacls $Path /grant:r $ace | Out-Null }',
       '  } catch { }',
