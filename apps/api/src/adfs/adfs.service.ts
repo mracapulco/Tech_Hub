@@ -647,7 +647,7 @@ export class AdfsService {
       'function Ensure-TechHubOu {',
       '  param([string]$Name,[string]$Path)',
       '  try {',
-      '    $found = Get-ADOrganizationalUnit -Filter "Name -eq \\"$Name\\"" -SearchBase $Path -ErrorAction Stop | Select-Object -First 1',
+      '    $found = Get-ADOrganizationalUnit -Filter "Name -eq ''$Name''" -SearchBase $Path -ErrorAction Stop | Select-Object -First 1',
       '    if ($found) { return }',
       '  } catch {',
       '    throw ("Falha ao consultar OU em " + $Path + ": " + $_.Exception.Message)',
