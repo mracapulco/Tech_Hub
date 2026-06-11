@@ -434,6 +434,9 @@ enum AdFsPermissionProfile {
   L
   LG
   LE
+  R
+  RW
+  RM
   FULL
 }
 

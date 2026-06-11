@@ -47,6 +47,31 @@ type GroupDependency = {
 };
 
 export default function AdFsPage() {
+  const permissionOptions = ["R", "RW", "RM", "FULL"] as const;
+  const normalizePermission = (value?: string | null) => {
+    if (value === "L" || value === "LE") return "R";
+    if (value === "LG") return "RM";
+    if (value === "R" || value === "RW" || value === "RM" || value === "FULL") return value;
+    return "R";
+  };
+  const deriveUserFieldsFromFullName = (fullName: string) => {
+    const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+    const firstName = parts[0] || "";
+    const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
+    const normalizeLoginPart = (value: string) =>
+      String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+    const usernameParts = [normalizeLoginPart(firstName), normalizeLoginPart(lastName)].filter(Boolean);
+    return {
+      firstName,
+      lastName,
+      username: usernameParts.join("."),
+    };
+  };
+
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -87,25 +112,23 @@ export default function AdFsPage() {
   const [uOrgId, setUOrgId] = useState("");
   const [uHomeEnabled, setUHomeEnabled] = useState(false);
   const [uHomeDriveLetter, setUHomeDriveLetter] = useState("");
+  const [uFirstNameManual, setUFirstNameManual] = useState(false);
+  const [uLastNameManual, setULastNameManualFlag] = useState(false);
+  const [uUsernameManual, setUUsernameManual] = useState(false);
   const [editingUserId, setEditingUserId] = useState("");
   const userImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const [fName, setFName] = useState("");
-  const [fDisableInheritance, setFDisableInheritance] = useState(true);
   const [selectedFolderId, setSelectedFolderId] = useState("");
   const [expandedFolderIds, setExpandedFolderIds] = useState<string[]>([]);
-  const [newFolderCreateGf, setNewFolderCreateGf] = useState(false);
-  const [newFolderCreateL, setNewFolderCreateL] = useState(true);
-  const [newFolderCreateLg, setNewFolderCreateLg] = useState(true);
-  const [newFolderCreateFull, setNewFolderCreateFull] = useState(false);
+  const [newFolderCreateMode, setNewFolderCreateMode] = useState<"GA" | "GFS">("GA");
   const [ensureParentGf, setEnsureParentGf] = useState(true);
   const [fpGroupId, setFpGroupId] = useState("");
-  const [fpPermission, setFpPermission] = useState("L");
+  const [fpPermission, setFpPermission] = useState("R");
   const [editFolderName, setEditFolderName] = useState("");
-  const [editFolderInheritance, setEditFolderInheritance] = useState(true);
   const [editingGroupId, setEditingGroupId] = useState("");
   const [editingGroupName, setEditingGroupName] = useState("");
-  const [editingGroupPermission, setEditingGroupPermission] = useState("L");
+  const [editingGroupPermission, setEditingGroupPermission] = useState("R");
   const [groupSearch, setGroupSearch] = useState("");
   const [groupDependencies, setGroupDependencies] = useState<GroupDependency | null>(null);
 
@@ -545,7 +568,6 @@ export default function AdFsPage() {
   useEffect(() => {
     if (selectedFolderId) {
       setEditFolderName(selectedFolder?.name || "");
-      setEditFolderInheritance(selectedFolder?.disableInheritance ?? true);
     } else {
       setEditFolderName("");
     }
@@ -557,7 +579,7 @@ export default function AdFsPage() {
     const group = groups.find((item) => item.id === editingGroupId);
     if (group) {
       setEditingGroupName(group.name);
-      setEditingGroupPermission(group.permission || "L");
+      setEditingGroupPermission(normalizePermission(group.permission));
     }
   }, [editingGroupId, groups]);
 
@@ -608,42 +630,22 @@ export default function AdFsPage() {
     if (!token || !projectId || !fName) return;
     setLoading(true);
     setError(null);
+    const parentFolderId = selectedFolderId || "";
     try {
-      if (selectedFolder && ensureParentGf) {
-        const parentGfName = `GF_${getFolderGroupBase(selectedFolder.id)}`;
-        const parentGfId = await ensureGroup(projectId, "GF", parentGfName);
-        await ensureFolderPermission(selectedFolder.id, parentGfId, "L", selectedFolder);
-      }
-
-      const folderResponse = await apiPost<{ ok: boolean; data?: Folder; error?: string }>("/adfs/folders", token, {
+      const folderResponse = await apiPost<{ ok: boolean; data?: Folder; error?: string }>("/adfs/folders/with-groups", token, {
         projectId,
-        parentId: selectedFolderId || undefined,
+        parentId: parentFolderId || undefined,
         name: fName,
-        disableInheritance: fDisableInheritance,
+        disableInheritance: true,
+        mode: newFolderCreateMode,
+        ensureParentGf,
       });
       if (!folderResponse?.ok || !folderResponse.data?.id) throw new Error(folderResponse?.error || "Falha ao criar pasta.");
 
       const createdFolder = folderResponse.data;
-      const base = getFolderGroupBase(selectedFolderId || null, fName);
-      if (newFolderCreateGf) {
-        const gfId = await ensureGroup(projectId, "GF", `GF_${base}`);
-        await ensureFolderPermission(createdFolder.id, gfId, "L");
-      }
-      if (newFolderCreateL) {
-        const groupId = await ensureGroup(projectId, "GA", `GA_${base}_L`, "L");
-        await ensureFolderPermission(createdFolder.id, groupId, "L");
-      }
-      if (newFolderCreateLg) {
-        const groupId = await ensureGroup(projectId, "GA", `GA_${base}_LG`, "LG");
-        await ensureFolderPermission(createdFolder.id, groupId, "LG");
-      }
-      if (newFolderCreateFull) {
-        const groupId = await ensureGroup(projectId, "GA", `GA_${base}_FULL`, "FULL");
-        await ensureFolderPermission(createdFolder.id, groupId, "FULL");
-      }
-
       setFName("");
       await loadProject(projectId);
+      setExpandedFolderIds((current) => Array.from(new Set([...current, parentFolderId, createdFolder.id].filter(Boolean))));
       setSelectedFolderId(createdFolder.id);
     } catch (err: any) {
       setError(err?.message || "Falha ao criar pasta.");
@@ -660,7 +662,6 @@ export default function AdFsPage() {
     try {
       const response = await apiPut<{ ok: boolean; error?: string }>(`/adfs/folders/${selectedFolderId}`, token, {
         name: editFolderName,
-        disableInheritance: editFolderInheritance,
       });
       if (!response?.ok) throw new Error(response?.error || "Falha ao atualizar pasta.");
       await loadProject(projectId);
@@ -787,6 +788,7 @@ export default function AdFsPage() {
   }
 
   function startEditUser(user: UserPlan) {
+    const derived = deriveUserFieldsFromFullName(user.fullName);
     setEditingUserId(user.id);
     setUFullName(user.fullName);
     setUFirstName(user.firstName);
@@ -801,6 +803,9 @@ export default function AdFsPage() {
     setUOrgId(user.orgNode?.id || "");
     setUHomeEnabled(Boolean(user.homeDriveEnabled));
     setUHomeDriveLetter((user.homeDriveLetter || "").toUpperCase());
+    setUFirstNameManual((user.firstName || "") !== derived.firstName);
+    setULastNameManualFlag((user.lastName || "") !== derived.lastName);
+    setUUsernameManual((user.username || "") !== derived.username);
   }
 
   function resetUserForm() {
@@ -818,6 +823,17 @@ export default function AdFsPage() {
     setUOrgId("");
     setUHomeEnabled(false);
     setUHomeDriveLetter("");
+    setUFirstNameManual(false);
+    setULastNameManualFlag(false);
+    setUUsernameManual(false);
+  }
+
+  function handleFullNameChange(value: string) {
+    setUFullName(value);
+    const derived = deriveUserFieldsFromFullName(value);
+    if (!uFirstNameManual) setUFirstName(derived.firstName);
+    if (!uLastNameManual) setULastName(derived.lastName);
+    if (!uUsernameManual) setUUsername(derived.username);
   }
 
   async function submitUser() {
@@ -1029,7 +1045,7 @@ export default function AdFsPage() {
           <div
             className={`flex items-center gap-2 rounded px-2 py-1 cursor-pointer border ${selected ? "bg-blue-50 border-blue-300" : "border-transparent hover:bg-gray-50"}`}
             style={{ marginLeft: depth * 16 }}
-            onClick={() => setSelectedFolderId((current) => current === node.id ? "" : node.id)}
+            onClick={() => setSelectedFolderId(node.id)}
           >
             <button
               type="button"
@@ -1042,7 +1058,6 @@ export default function AdFsPage() {
               {node.children.length ? (expanded ? "▾" : "▸") : "•"}
             </button>
             <span className="font-medium">{node.name}</span>
-            {node.disableInheritance && <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Herança off</span>}
           </div>
           {expanded && node.children.length > 0 ? renderFolderTree(node.children, depth + 1) : null}
         </div>
@@ -1190,10 +1205,10 @@ export default function AdFsPage() {
                 CSV: `fullName`, `firstName`, `lastName`, `username`, `email`, `title`, `sectorPath`, `password`, `gaGroups`. Em `gaGroups`, separe os grupos por `|`.
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <input value={uFullName} onChange={(e) => setUFullName(e.target.value)} className="px-3 py-2 border rounded" placeholder="Nome completo" />
-                <input value={uFirstName} onChange={(e) => setUFirstName(e.target.value)} className="px-3 py-2 border rounded" placeholder="Primeiro nome" />
-                <input value={uLastName} onChange={(e) => setULastName(e.target.value)} className="px-3 py-2 border rounded" placeholder="Sobrenome" />
-                <input value={uUsername} onChange={(e) => setUUsername(e.target.value)} className="px-3 py-2 border rounded" placeholder="Login" />
+                <input value={uFullName} onChange={(e) => handleFullNameChange(e.target.value)} className="px-3 py-2 border rounded" placeholder="Nome completo" />
+                <input value={uFirstName} onChange={(e) => { setUFirstName(e.target.value); setUFirstNameManual(true); }} className="px-3 py-2 border rounded" placeholder="Primeiro nome" />
+                <input value={uLastName} onChange={(e) => { setULastName(e.target.value); setULastNameManualFlag(true); }} className="px-3 py-2 border rounded" placeholder="Sobrenome" />
+                <input value={uUsername} onChange={(e) => { setUUsername(e.target.value); setUUsernameManual(true); }} className="px-3 py-2 border rounded" placeholder="Login" />
                 <input value={uEmail} onChange={(e) => setUEmail(e.target.value)} className="px-3 py-2 border rounded" placeholder="Email" />
                 <input value={uTitle} onChange={(e) => setUTitle(e.target.value)} className="px-3 py-2 border rounded" placeholder="Cargo" />
                 <select value={uPasswordMode} onChange={(e) => changeUserPasswordMode(e.target.value as "RANDOM" | "FIXED")} className="px-3 py-2 border rounded">
@@ -1318,7 +1333,6 @@ export default function AdFsPage() {
                     {selectedFolder && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t">
                         <input value={editFolderName} onChange={(e) => setEditFolderName(e.target.value)} className="px-3 py-2 border rounded" placeholder="Nome da pasta" />
-                        <label className="flex items-center gap-2 text-sm px-2"><input type="checkbox" checked={editFolderInheritance} onChange={(e) => setEditFolderInheritance(e.target.checked)} />Desabilitar herança</label>
                         <button onClick={saveSelectedFolder} className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-800 text-white" disabled={!editFolderName || loading}>Salvar pasta</button>
                         <button onClick={removeSelectedFolder} className="px-3 py-2 rounded bg-red-600 hover:bg-red-700 text-white" disabled={loading}>Excluir pasta</button>
                       </div>
@@ -1328,16 +1342,30 @@ export default function AdFsPage() {
                   <div className="border rounded p-3 space-y-3">
                     <div className="font-semibold text-sm">Nova pasta / subpasta</div>
                     <input value={fName} onChange={(e) => setFName(e.target.value)} className="px-3 py-2 border rounded" placeholder="Nome da nova pasta" />
-                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={fDisableInheritance} onChange={(e) => setFDisableInheritance(e.target.checked)} />Desabilitar herança</label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={newFolderCreateGf} onChange={(e) => setNewFolderCreateGf(e.target.checked)} />Criar GF da pasta</label>
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={newFolderCreateL} onChange={(e) => setNewFolderCreateL(e.target.checked)} />Criar GA leitura</label>
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={newFolderCreateLg} onChange={(e) => setNewFolderCreateLg(e.target.checked)} />Criar GA leitura/gravação</label>
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={newFolderCreateFull} onChange={(e) => setNewFolderCreateFull(e.target.checked)} />Criar GA completo</label>
+                    <div className="space-y-2">
+                      <div className="text-sm font-semibold">Criar grupos</div>
+                      <div className="inline-flex rounded border overflow-hidden text-sm">
+                        <button
+                          type="button"
+                          onClick={() => setNewFolderCreateMode("GA")}
+                          className={`px-3 py-2 ${newFolderCreateMode === "GA" ? "bg-blue-600 text-white" : "bg-white hover:bg-gray-50"}`}
+                        >
+                          Criar GAs
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewFolderCreateMode("GFS")}
+                          className={`px-3 py-2 border-l ${newFolderCreateMode === "GFS" ? "bg-blue-600 text-white" : "bg-white hover:bg-gray-50"}`}
+                        >
+                          Criar GF
+                        </button>
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {newFolderCreateMode === "GA"
+                          ? "Cria GA_R, GA_RW, GA_RM e GA_FULL e aplica as permissões na pasta."
+                          : "Cria o GF da pasta e aplica permissão R na pasta."}
+                      </div>
                     </div>
-                    {selectedFolder && (
-                      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={ensureParentGf} onChange={(e) => setEnsureParentGf(e.target.checked)} />Garantir GF na pasta pai selecionada</label>
-                    )}
                     <button onClick={createFolderWithGroups} className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white" disabled={!fName || loading}>Criar na estrutura</button>
                   </div>
 
@@ -1349,10 +1377,7 @@ export default function AdFsPage() {
                         {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                       </select>
                       <select value={fpPermission} onChange={(e) => setFpPermission(e.target.value)} className="px-3 py-2 border rounded">
-                        <option value="L">L</option>
-                        <option value="LG">LG</option>
-                        <option value="LE">LE</option>
-                        <option value="FULL">FULL</option>
+                        {permissionOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </div>
                     <button onClick={() => postAndReload('/adfs/folder-permissions', { folderNodeId: selectedFolderId, groupId: fpGroupId, permission: fpPermission })} className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white" disabled={!selectedFolderId || !fpGroupId || loading}>Adicionar permissão</button>
@@ -1386,10 +1411,7 @@ export default function AdFsPage() {
                         <div className="font-semibold text-sm">Editar grupo</div>
                         <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} className="w-full px-3 py-2 border rounded" />
                         <select value={editingGroupPermission} onChange={(e) => setEditingGroupPermission(e.target.value)} className="w-full px-3 py-2 border rounded">
-                          <option value="L">L</option>
-                          <option value="LG">LG</option>
-                          <option value="LE">LE</option>
-                          <option value="FULL">FULL</option>
+                          {permissionOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                         </select>
                         <div className="flex gap-2">
                           <button onClick={saveGroup} className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-800 text-white" disabled={!editingGroupName || loading}>Salvar grupo</button>
@@ -1443,10 +1465,7 @@ export default function AdFsPage() {
                     <div className="grid grid-cols-1 gap-2">
                       <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="Nome do grupo" />
                       <select value={editingGroupPermission} onChange={(e) => setEditingGroupPermission(e.target.value)} className="w-full px-3 py-2 border rounded">
-                        <option value="L">L</option>
-                        <option value="LG">LG</option>
-                        <option value="LE">LE</option>
-                        <option value="FULL">FULL</option>
+                        {permissionOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </div>
                     <div className="flex gap-2">

@@ -310,6 +310,156 @@ export class AdfsService {
     });
   }
 
+  private async ensureProjectGroupTx(
+    tx: any,
+    data: { projectId: string; kind: string; name: string; permission?: string; orgNodeId?: string },
+  ) {
+    const existing = await tx.adFsGroup.findFirst({
+      where: { projectId: String(data.projectId), name: String(data.name) },
+    });
+    if (existing) return existing;
+    return tx.adFsGroup.create({
+      data: {
+        projectId: String(data.projectId),
+        kind: data.kind as any,
+        name: String(data.name),
+        permission: data.permission ? (data.permission as any) : undefined,
+        orgNodeId: data.orgNodeId || undefined,
+      },
+    });
+  }
+
+  private async ensureFolderPermissionTx(
+    tx: any,
+    data: { folderNodeId: string; groupId: string; permission: string; appliesTo?: string; deny?: boolean },
+  ) {
+    const deny = Boolean(data.deny);
+    if (String(data.permission || '') === 'LG' && !deny) {
+      const existingLg = await tx.adFsFolderPermission.findFirst({
+        where: {
+          folderNodeId: String(data.folderNodeId),
+          permission: 'LG' as any,
+          deny: false,
+          groupId: { not: String(data.groupId) },
+        },
+        include: { group: { select: { name: true } } },
+      });
+      if (existingLg) {
+        throw new Error(`Esta pasta já possui um grupo LG definido como proprietário: ${existingLg.group.name}.`);
+      }
+    }
+    const existing = await tx.adFsFolderPermission.findFirst({
+      where: {
+        folderNodeId: String(data.folderNodeId),
+        groupId: String(data.groupId),
+        permission: data.permission as any,
+        deny,
+      },
+    });
+    if (existing) return existing;
+    return tx.adFsFolderPermission.create({
+      data: {
+        folderNodeId: String(data.folderNodeId),
+        groupId: String(data.groupId),
+        permission: data.permission as any,
+        appliesTo: data.appliesTo || undefined,
+        deny,
+      },
+      include: { group: true },
+    });
+  }
+
+  async createFolderWithGroups(data: {
+    projectId: string;
+    parentId?: string;
+    name: string;
+    disableInheritance?: boolean;
+    mode?: string;
+    ensureParentGf?: boolean;
+  }) {
+    const projectId = String(data.projectId || '');
+    const folderName = String(data.name || '').trim();
+    if (!projectId) throw new Error('projectId obrigatório.');
+    if (!folderName) throw new Error('Nome da pasta obrigatório.');
+
+    const existingFolders = await this.prisma.adFsFolderNode.findMany({
+      where: { projectId },
+      select: { id: true, parentId: true, name: true },
+    });
+    const folderMap = new Map(existingFolders.map((folder) => [folder.id, folder]));
+    const pathPartsFor = (folderId?: string | null, extraName?: string) => {
+      const parts: string[] = [];
+      let currentId = folderId || null;
+      while (currentId) {
+        const current: any = folderMap.get(currentId);
+        if (!current) break;
+        parts.unshift(String(current.name));
+        currentId = current.parentId || null;
+      }
+      if (extraName) parts.push(extraName);
+      return parts;
+    };
+    const parentId = data.parentId ? String(data.parentId) : undefined;
+    const base = this.sanitizeName(pathPartsFor(parentId, folderName).join('_'));
+    const parentBase = parentId ? this.sanitizeName(pathPartsFor(parentId).join('_')) : '';
+    const mode = String(data.mode || 'GA').toUpperCase();
+    const ensureParentGf = data.ensureParentGf !== false;
+
+    return this.prisma.$transaction(async (tx) => {
+      const createdFolder = await tx.adFsFolderNode.create({
+        data: {
+          projectId,
+          parentId,
+          name: folderName,
+          disableInheritance: data.disableInheritance != null ? Boolean(data.disableInheritance) : true,
+        },
+        include: { permissions: { include: { group: true } } },
+      });
+
+      if (parentId && ensureParentGf && parentBase) {
+        const parentGf = await this.ensureProjectGroupTx(tx, {
+          projectId,
+          kind: 'GF',
+          name: `GF_${parentBase}`,
+        });
+        await this.ensureFolderPermissionTx(tx, {
+          folderNodeId: parentId,
+          groupId: parentGf.id,
+          permission: 'R',
+        });
+      }
+
+      if (mode === 'GFS') {
+        const gf = await this.ensureProjectGroupTx(tx, {
+          projectId,
+          kind: 'GF',
+          name: `GF_${base}`,
+        });
+        await this.ensureFolderPermissionTx(tx, {
+          folderNodeId: createdFolder.id,
+          groupId: gf.id,
+          permission: 'R',
+        });
+      } else {
+        for (const permission of ['R', 'RW', 'RM', 'FULL']) {
+          const group = await this.ensureProjectGroupTx(tx, {
+            projectId,
+            kind: 'GA',
+            name: `GA_${base}_${permission}`,
+            permission,
+          });
+          await this.ensureFolderPermissionTx(tx, {
+            folderNodeId: createdFolder.id,
+            groupId: group.id,
+            permission,
+          });
+        }
+      }
+
+      return createdFolder;
+    });
+  }
+
   listFolders(projectId: string) {
     return this.prisma.adFsFolderNode.findMany({
       where: { projectId },
@@ -332,7 +482,7 @@ export class AdfsService {
   async deleteFolder(id: string) {
     const target = await this.prisma.adFsFolderNode.findUnique({ where: { id }, select: { id: true, projectId: true } });
     if (!target) return { deleted: false };
-    const allFolders = await this.prisma.adFsFolderNode.findMany({ where: { projectId: target.projectId }, select: { id: true, parentId: true } });
+    const allFolders = await this.prisma.adFsFolderNode.findMany({ where: { projectId: target.projectId }, select: { id: true, parentId: true, name: true } });
     const ids = new Set<string>([id]);
     let changed = true;
     while (changed) {
@@ -360,7 +510,35 @@ export class AdfsService {
       where: { folderNodeId: { in: orderedIds } },
       select: { groupId: true },
     });
-    const candidateGroupIds = [...new Set(folderPermissions.map((item) => item.groupId))];
+    const folderById = new Map(allFolders.map((folder) => [folder.id, folder]));
+    const branchGroupNames = new Set<string>();
+    const permissionSuffixes = ['R', 'RW', 'RM', 'FULL', 'L', 'LG', 'LE'];
+    const folderPathParts = (folderId: string) => {
+      const parts: string[] = [];
+      let current: any = folderById.get(folderId);
+      while (current) {
+        parts.unshift(String(current.name));
+        current = current.parentId ? folderById.get(current.parentId) : null;
+      }
+      return parts;
+    };
+    for (const folderId of orderedIds) {
+      const folder = folderById.get(folderId);
+      if (!folder) continue;
+      const fullBase = this.sanitizeName(folderPathParts(folderId).join('_'));
+      const legacyBase = this.sanitizeName(folder.name);
+      for (const base of new Set([fullBase, legacyBase].filter(Boolean))) {
+        branchGroupNames.add(`GF_${base}`);
+        for (const suffix of permissionSuffixes) branchGroupNames.add(`GA_${base}_${suffix}`);
+      }
+    }
+    const namedGroups = branchGroupNames.size
+      ? await this.prisma.adFsGroup.findMany({
+          where: { projectId: target.projectId, name: { in: Array.from(branchGroupNames) } },
+          select: { id: true },
+        })
+      : [];
+    const candidateGroupIds = [...new Set([...folderPermissions.map((item) => item.groupId), ...namedGroups.map((group) => group.id)])];
     const groupsStillUsedOutsideBranch = await this.prisma.adFsFolderPermission.findMany({
       where: {
         groupId: { in: candidateGroupIds },
@@ -509,13 +687,6 @@ export class AdfsService {
 
     const rootGfName = `GF_${this.sanitizeName(rootFolderName)}`;
 
-    const allGroupNames = new Set<string>(project.groups.map((g) => g.name));
-    allGroupNames.add(rootGfName);
-
-    const topLevelFolders = project.folders.filter((f) => !f.parentId);
-    const topLevelGfNames = topLevelFolders.map((f) => `GF_${this.sanitizeName(f.name)}`);
-    for (const gfName of topLevelGfNames) allGroupNames.add(gfName);
-
     const orgLines = [...project.orgNodes]
       .sort((a, b) => {
         const depth = (node: any) => {
@@ -536,10 +707,91 @@ export class AdfsService {
       return `Ensure-TechHubOu -Name "${psEscape(o.name)}" -Path "${psEscape(path)}"`;
     });
 
+    const folderPathParts = (folderId: string) => {
+      const parts: string[] = [];
+      let current: any = folderMap.get(folderId);
+      while (current) {
+        parts.unshift(String(current.name));
+        current = current.parentId ? folderMap.get(current.parentId) : null;
+      }
+      return parts;
+    };
+
+    const folderBaseById = new Map<string, string>();
+    const folderByBase = new Map<string, any>();
+    const folderLegacyBaseSet = new Set<string>();
+    for (const folder of project.folders) {
+      const base = this.sanitizeName(folderPathParts(folder.id).join('_'));
+      folderBaseById.set(folder.id, base);
+      if (!folderByBase.has(base)) folderByBase.set(base, folder);
+      folderLegacyBaseSet.add(this.sanitizeName(folder.name));
+    }
+
+    const folderDepth = (folder: any) => folderPathParts(folder.id).length;
+    const foldersByDepthAsc = [...project.folders].sort((a, b) => folderDepth(a) - folderDepth(b) || String(a.name).localeCompare(String(b.name)));
+
+    const folderOuDnById = new Map<string, string>();
+    for (const folder of foldersByDepthAsc) {
+      const parentDn = folder.parentId ? (folderOuDnById.get(folder.parentId) || fileServerOuDn) : fileServerOuDn;
+      folderOuDnById.set(folder.id, `OU=${folder.name},${parentDn}`);
+    }
+
+    const folderOuLines = foldersByDepthAsc.map((folder) => {
+      const parentDn = folder.parentId ? (folderOuDnById.get(folder.parentId) || fileServerOuDn) : fileServerOuDn;
+      return `Ensure-TechHubOu -Name "${psEscape(folder.name)}" -Path "${psEscape(parentDn)}"`;
+    });
+
+    const topLevelFolderIds = project.folders.filter((f) => !f.parentId).map((f) => f.id);
+    const topLevelGfNames = topLevelFolderIds
+      .map((folderId) => folderBaseById.get(folderId))
+      .filter(Boolean)
+      .map((base) => `GF_${base}`);
+    const folderGfNames = foldersByDepthAsc
+      .map((folder) => folderBaseById.get(folder.id) || this.sanitizeName(folder.name))
+      .filter(Boolean)
+      .map((base) => `GF_${base}`);
+    const isKnownFolderGroupName = (groupName: string) => {
+      if (groupName === rootGfName) return true;
+      if (groupName.startsWith('GF_')) {
+        const base = groupName.slice(3);
+        return folderByBase.has(base) || folderLegacyBaseSet.has(base);
+      }
+      if (groupName.startsWith('GA_')) {
+        const rest = groupName.slice(3);
+        const idx = rest.lastIndexOf('_');
+        const base = idx > 0 ? rest.slice(0, idx) : rest;
+        return folderByBase.has(base) || folderLegacyBaseSet.has(base);
+      }
+      return true;
+    };
+    const allGroupNames = new Set<string>(project.groups.map((g) => g.name).filter(isKnownFolderGroupName));
+    allGroupNames.add(rootGfName);
+    for (const gfName of folderGfNames) allGroupNames.add(gfName);
+    for (const gfName of topLevelGfNames) allGroupNames.add(gfName);
+
+    const groupOuPathFor = (groupName: string) => {
+      if (groupName === rootGfName) return fileServerOuDn;
+      if (groupName.startsWith('GF_')) {
+        const base = groupName.slice(3);
+        const folder = folderByBase.get(base);
+        if (folder?.id) return folderOuDnById.get(folder.id) || fileServerOuDn;
+        return fileServerOuDn;
+      }
+      if (groupName.startsWith('GA_')) {
+        const rest = groupName.slice(3);
+        const idx = rest.lastIndexOf('_');
+        const base = idx > 0 ? rest.slice(0, idx) : rest;
+        const folder = folderByBase.get(base);
+        if (folder?.id) return folderOuDnById.get(folder.id) || fileServerOuDn;
+        return fileServerOuDn;
+      }
+      return fileServerOuDn;
+    };
+
     const groupLines = [
       ...Array.from(allGroupNames)
         .sort((a, b) => a.localeCompare(b))
-        .map((name) => `Ensure-TechHubAdGroup -Name "${psEscape(name)}" -Path "${psEscape(fileServerOuDn)}"`),
+        .map((name) => `Ensure-TechHubAdGroup -Name "${psEscape(name)}" -Path "${psEscape(groupOuPathFor(name))}"`),
     ];
 
     const groupNestingLines: string[] = [];
@@ -556,9 +808,16 @@ export class AdfsService {
       return current;
     };
     for (const folder of project.folders) {
-      const top = topFolderOf(folder);
-      if (!top?.id) continue;
-      const parentGf = `GF_${this.sanitizeName(top.name)}`;
+      if (!folder.parentId) continue;
+      const parentFolder = folderMap.get(folder.parentId);
+      if (!parentFolder) continue;
+      const parentBase = folderBaseById.get(parentFolder.id) || this.sanitizeName(parentFolder.name);
+      const childBase = folderBaseById.get(folder.id) || this.sanitizeName(folder.name);
+      groupNestingLines.push(`Ensure-TechHubAdGroupInclude -Parent "${psEscape(`GF_${parentBase}`)}" -Child "${psEscape(`GF_${childBase}`)}"`);
+    }
+    for (const folder of project.folders) {
+      const folderBase = folderBaseById.get(folder.id) || this.sanitizeName(folder.name);
+      const parentGf = `GF_${folderBase}`;
       for (const perm of folder.permissions || []) {
         if (perm?.group?.kind === 'GA') {
           groupNestingLines.push(`Ensure-TechHubAdGroupInclude -Parent "${psEscape(parentGf)}" -Child "${psEscape(perm.group.name)}"`);
@@ -591,17 +850,74 @@ export class AdfsService {
       return lines;
     });
 
-    const folderLines = project.folders.flatMap((f) => {
+    const folderLines = project.folders.flatMap((f: any) => {
       const path = this.buildFolderPath(f, folderMap, rootPath);
       const lines: string[] = [`Ensure-TechHubFolder -Path "${psEscape(path)}"`];
       if (f.disableInheritance) lines.push(`Ensure-TechHubDisableInheritance -Path "${psEscape(path)}" -Mode "d"`);
       lines.push(`Ensure-TechHubAdministratorsFullControl -Path "${psEscape(path)}"`);
       lines.push(`Ensure-TechHubSystemFullControl -Path "${psEscape(path)}"`);
       lines.push(`Ensure-TechHubCreatorOwnerFullControl -Path "${psEscape(path)}"`);
-      for (const p of f.permissions) {
-        const permMap: Record<string, string> = { L: 'R', LG: 'M', LE: 'RX', FULL: 'F' };
-        const right = permMap[p.permission] || 'R';
-        lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "${right}" -AppliesTo "${psEscape(p.appliesTo || 'ThisFolderSubfoldersAndFiles')}" -Deny:$${p.deny ? 'true' : 'false'}`);
+      const currentFolderGf = `GF_${folderBaseById.get(f.id) || this.sanitizeName(f.name)}`;
+      lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(currentFolderGf)}" -Right "RX" -AppliesTo "ThisFolderOnly"`);
+
+      const top = topFolderOf(f);
+      const topGf = top?.id ? `GF_${folderBaseById.get(top.id) || this.sanitizeName(top.name)}` : null;
+      let ownerGroupName: string | null = null;
+
+      for (const p of f.permissions || []) {
+        if (!p?.group?.name) continue;
+        if (p.group.kind === 'GF' && String(p.group.name) === currentFolderGf) {
+          continue;
+        }
+        if (p.group.kind === 'GF' && topGf && String(p.group.name) === String(topGf) && String(f.id) !== String(top?.id)) {
+          continue;
+        }
+
+        const profile = String(p.permission || '');
+        const deny = Boolean(p.deny);
+
+        if (!deny && profile === 'LG') {
+          ownerGroupName = String(p.group.name);
+        }
+
+        if (!deny && profile === 'FULL') {
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "WD,AD" -AppliesTo "ThisFolderOnly"`);
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "M" -AppliesTo "SubfoldersAndFilesOnly"`);
+          continue;
+        }
+
+        if (!deny && profile === 'RM') {
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "WD,AD" -AppliesTo "ThisFolderSubfoldersOnly"`);
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "RX" -AppliesTo "SubfoldersAndFilesOnly"`);
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "W" -AppliesTo "FilesOnly"`);
+          continue;
+        }
+
+        if (!deny && profile === 'RW') {
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "WD,AD" -AppliesTo "ThisFolderSubfoldersOnly"`);
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "RX" -AppliesTo "SubfoldersAndFilesOnly"`);
+          continue;
+        }
+
+        if (!deny && (profile === 'R' || profile === 'L' || profile === 'LE')) {
+          const appliesTo = p.group.kind === 'GF' ? 'ThisFolderOnly' : 'SubfoldersAndFilesOnly';
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "RX" -AppliesTo "${appliesTo}"`);
+          continue;
+        }
+
+        if (!deny && p.group.kind === 'GF') {
+          lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "RX" -AppliesTo "ThisFolderOnly"`);
+          continue;
+        }
+
+        const permMap: Record<string, string> = { L: 'R', LE: 'RX', R: 'RX', RW: 'W', RM: 'W', FULL: 'M', LG: 'F' };
+        const right = permMap[profile] || 'R';
+        const appliesTo = profile === 'LG' ? 'ThisFolderSubfoldersAndFiles' : String(p.appliesTo || 'ThisFolderSubfoldersAndFiles');
+        lines.push(`Ensure-TechHubFolderPermission -Path "${psEscape(path)}" -Identity "${psEscape(p.group.name)}" -Right "${right}" -AppliesTo "${psEscape(appliesTo)}" -Deny:${deny ? '$true' : '$false'}`);
+      }
+
+      if (ownerGroupName) {
+        lines.push(`Ensure-TechHubSetOwner -Path "${psEscape(path)}" -Owner "${psEscape(ownerGroupName)}"`);
       }
       return lines;
     });
@@ -615,9 +931,38 @@ export class AdfsService {
     });
 
     const functions = [
+      'function Initialize-TechHubLog {',
+      '  $baseDir = $PSScriptRoot',
+      '  if ([string]::IsNullOrWhiteSpace($baseDir)) { $baseDir = (Get-Location).Path }',
+      '  $fileName = "TechHub-ADFS-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".log"',
+      '  $primaryPath = Join-Path $baseDir $fileName',
+      '  try {',
+      '    New-Item -ItemType File -Path $primaryPath -Force -ErrorAction Stop | Out-Null',
+      '    $script:TechHubLogPath = $primaryPath',
+      '  } catch {',
+      '    $fallbackDir = [System.IO.Path]::GetTempPath()',
+      '    $fallbackPath = Join-Path $fallbackDir $fileName',
+      '    New-Item -ItemType File -Path $fallbackPath -Force -ErrorAction Stop | Out-Null',
+      '    $script:TechHubLogPath = $fallbackPath',
+      '  }',
+      '}',
+      '',
+      'function Write-TechHubLog {',
+      '  param([string]$Level,[string]$Message)',
+      '  $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"',
+      '  $line = $timestamp + " [" + $Level + "] " + $Message',
+      '  if ([string]::IsNullOrWhiteSpace($script:TechHubLogPath)) { return }',
+      '  try {',
+      '    Add-Content -LiteralPath $script:TechHubLogPath -Value $line -Encoding UTF8 -ErrorAction Stop',
+      '  } catch {',
+      '    Write-Host ("[TechHub][WARN] Falha ao gravar log: " + $_.Exception.Message) -ForegroundColor Yellow',
+      '  }',
+      '}',
+      '',
       'function Write-TechHubStep {',
       '  param([string]$Message)',
       '  Write-Host ("[TechHub] " + $Message)',
+      '  Write-TechHubLog -Level "INFO" -Message $Message',
       '}',
       '',
       'function Get-TechHubDomainNetbios {',
@@ -646,14 +991,19 @@ export class AdfsService {
       '',
       'function Ensure-TechHubOu {',
       '  param([string]$Name,[string]$Path)',
+      '  Write-TechHubLog -Level "INFO" -Message ("OU: validando " + $Name + " em " + $Path)',
       '  try {',
       '    $found = Get-ADOrganizationalUnit -Filter "Name -eq \'$Name\'" -SearchBase $Path -ErrorAction Stop | Select-Object -First 1',
-      '    if ($found) { return }',
+      '    if ($found) {',
+      '      Write-TechHubLog -Level "INFO" -Message ("OU: já existe " + $Name + " em " + $Path)',
+      '      return',
+      '    }',
       '  } catch {',
       '    throw ("Falha ao consultar OU em " + $Path + ": " + $_.Exception.Message)',
       '  }',
       '  try {',
       '    New-ADOrganizationalUnit -Name $Name -Path $Path -ProtectedFromAccidentalDeletion $false -ErrorAction Stop | Out-Null',
+      '    Write-TechHubLog -Level "INFO" -Message ("OU: criada " + $Name + " em " + $Path)',
       '  } catch {',
       '    throw ("Falha ao criar OU " + $Name + " em " + $Path + ": " + $_.Exception.Message)',
       '  }',
@@ -661,11 +1011,16 @@ export class AdfsService {
       '',
       'function Ensure-TechHubAdGroup {',
       '  param([string]$Name,[string]$Path)',
+      '  Write-TechHubLog -Level "INFO" -Message ("Grupo: validando " + $Name + " em " + $Path)',
       '  $g = $null',
       '  try { $g = Get-ADGroup -Identity $Name -ErrorAction Stop } catch { }',
-      '  if ($g) { return }',
+      '  if ($g) {',
+      '    Write-TechHubLog -Level "INFO" -Message ("Grupo: já existe " + $Name)',
+      '    return',
+      '  }',
       '  try {',
       '    New-ADGroup -Name $Name -SamAccountName $Name -GroupScope Global -GroupCategory Security -Path $Path -ErrorAction Stop | Out-Null',
+      '    Write-TechHubLog -Level "INFO" -Message ("Grupo: criado " + $Name + " em " + $Path)',
       '  } catch {',
       '    throw ("Falha ao criar grupo " + $Name + ": " + $_.Exception.Message)',
       '  }',
@@ -685,12 +1040,17 @@ export class AdfsService {
       '    [string]$HomeDrive = "",',
       '    [string]$HomeDirectory = ""',
       '  )',
+      '  Write-TechHubLog -Level "INFO" -Message ("Usuário: validando " + $SamAccountName + " em " + $Path)',
       '  $existing = $null',
       '  try { $existing = Get-ADUser -Identity $SamAccountName -ErrorAction Stop } catch { }',
       '  if ($existing) {',
       '    if (!([string]::IsNullOrWhiteSpace($HomeDrive) -or [string]::IsNullOrWhiteSpace($HomeDirectory))) {',
-      '      try { Set-ADUser -Identity $SamAccountName -HomeDrive $HomeDrive -HomeDirectory $HomeDirectory -ErrorAction Stop } catch { throw ("Falha ao atualizar HomeDrive/HomeDirectory do usuário " + $SamAccountName + ": " + $_.Exception.Message) }',
+      '      try {',
+      '        Set-ADUser -Identity $SamAccountName -HomeDrive $HomeDrive -HomeDirectory $HomeDirectory -ErrorAction Stop',
+      '        Write-TechHubLog -Level "INFO" -Message ("Usuário: atualizado HomeDrive/HomeDirectory de " + $SamAccountName)',
+      '      } catch { throw ("Falha ao atualizar HomeDrive/HomeDirectory do usuário " + $SamAccountName + ": " + $_.Exception.Message) }',
       '    }',
+      '    Write-TechHubLog -Level "INFO" -Message ("Usuário: já existe " + $SamAccountName)',
       '    return',
       '  }',
       '  try {',
@@ -700,6 +1060,7 @@ export class AdfsService {
       '    } else {',
       '      New-ADUser -Name $Name -GivenName $GivenName -Surname $Surname -SamAccountName $SamAccountName -UserPrincipalName $UserPrincipalName -Path $Path -EmailAddress $EmailAddress -Title $Title -AccountPassword $secure -Enabled $true -HomeDrive $HomeDrive -HomeDirectory $HomeDirectory -ErrorAction Stop | Out-Null',
       '    }',
+      '    Write-TechHubLog -Level "INFO" -Message ("Usuário: criado " + $SamAccountName + " em " + $Path)',
       '  } catch {',
       '    throw ("Falha ao criar usuário " + $SamAccountName + ": " + $_.Exception.Message)',
       '  }',
@@ -712,9 +1073,13 @@ export class AdfsService {
       '    $list = Get-ADGroupMember -Identity $Parent -Recursive:$false -ErrorAction Stop | Select-Object -ExpandProperty SamAccountName',
       '    if ($list -contains $Child) { $already = $true }',
       '  } catch { }',
-      '  if ($already) { return }',
+      '  if ($already) {',
+      '    Write-TechHubLog -Level "INFO" -Message ("Nesting: já existe " + $Child + " em " + $Parent)',
+      '    return',
+      '  }',
       '  try {',
       '    Add-ADGroupMember -Identity $Parent -Members $Child -ErrorAction Stop',
+      '    Write-TechHubLog -Level "INFO" -Message ("Nesting: adicionado " + $Child + " em " + $Parent)',
       '  } catch {',
       '    if ($_.Exception.Message -match "already" -or $_.Exception.Message -match "já") { return }',
       '    throw ("Falha ao incluir " + $Child + " no grupo " + $Parent + ": " + $_.Exception.Message)',
@@ -723,8 +1088,14 @@ export class AdfsService {
       '',
       'function Ensure-TechHubFolder {',
       '  param([string]$Path)',
+      '  $exists = Test-Path -LiteralPath $Path',
       '  try {',
       '    New-Item -ItemType Directory -Force -Path $Path -ErrorAction Stop | Out-Null',
+      '    if ($exists) {',
+      '      Write-TechHubLog -Level "INFO" -Message ("Pasta: já existia " + $Path)',
+      '    } else {',
+      '      Write-TechHubLog -Level "INFO" -Message ("Pasta: criada " + $Path)',
+      '    }',
       '  } catch {',
       '    throw ("Falha ao criar pasta " + $Path + ": " + $_.Exception.Message)',
       '  }',
@@ -735,6 +1106,7 @@ export class AdfsService {
       '  if (!(Test-Path -LiteralPath $Path)) { throw ("Pasta não encontrada para ajustar herança: " + $Path) }',
       '  icacls "$Path" "/inheritance:$Mode" | Out-Null',
       '  if ($LASTEXITCODE -ne 0) { throw ("Falha no icacls (inheritance) em " + $Path + ". Código: " + $LASTEXITCODE) }',
+      '  Write-TechHubLog -Level "INFO" -Message ("ACL: herança ajustada em " + $Path + " para modo " + $Mode)',
       '}',
       '',
       'function Convert-TechHubAppliesTo {',
@@ -744,6 +1116,8 @@ export class AdfsService {
       '    "ThisFolderSubfoldersAndFiles" { return "(OI)(CI)" }',
       '    "ThisFolderSubfoldersOnly" { return "(CI)" }',
       '    "ThisFolderFilesOnly" { return "(OI)" }',
+      '    "FilesOnly" { return "(OI)(IO)" }',
+      '    "SubfoldersOnly" { return "(CI)(IO)" }',
       '    "SubfoldersAndFilesOnly" { return "(OI)(CI)(IO)" }',
       '    default { return "(OI)(CI)" }',
       '  }',
@@ -767,6 +1141,8 @@ export class AdfsService {
       '    icacls "$Path" /grant:r "$ace" | Out-Null',
       '  }',
       '  if ($LASTEXITCODE -ne 0) { throw ("Falha no icacls em " + $Path + " para " + $ace + ". Código: " + $LASTEXITCODE) }',
+      '  $mode = if ($Deny) { "deny" } else { "grant" }',
+      '  Write-TechHubLog -Level "INFO" -Message ("ACL: " + $mode + " " + $ace + " em " + $Path + " (" + $AppliesTo + ")")',
       '}',
       '',
       'function Ensure-TechHubAdministratorsFullControl {',
@@ -784,19 +1160,79 @@ export class AdfsService {
       '  Ensure-TechHubFolderPermission -Path $Path -Identity "*S-1-3-0" -Right "F" -AppliesTo "SubfoldersAndFilesOnly"',
       '}',
       '',
+      'function Ensure-TechHubSetOwner {',
+      '  param([string]$Path,[string]$Owner)',
+      '  if (!(Test-Path -LiteralPath $Path)) { throw ("Pasta não encontrada para definir owner: " + $Path) }',
+      '  $ownerId = Resolve-TechHubIdentity -SamAccountName $Owner',
+      '  icacls "$Path" /setowner "$ownerId" | Out-Null',
+      '  if ($LASTEXITCODE -ne 0) { throw ("Falha no icacls (setowner) em " + $Path + " para " + $ownerId + ". Código: " + $LASTEXITCODE) }',
+      '  Write-TechHubLog -Level "INFO" -Message ("Owner: definido " + $ownerId + " em " + $Path)',
+      '}',
+      '',
       'function Ensure-TechHubUserHomeFolder {',
       '  param([string]$Path,[string]$Owner)',
       '  $ownerId = Resolve-TechHubIdentity -SamAccountName $Owner',
       '  Ensure-TechHubFolder -Path $Path',
-      '  Ensure-TechHubDisableInheritance -Path $Path -Mode "d"',
+      '  Ensure-TechHubDisableInheritance -Path $Path -Mode "r"',
       '  Ensure-TechHubAdministratorsFullControl -Path $Path',
       '  Ensure-TechHubSystemFullControl -Path $Path',
-      '  Ensure-TechHubCreatorOwnerFullControl -Path $Path',
-      '  Ensure-TechHubFolderPermission -Path $Path -Identity $Owner -Right "F" -AppliesTo "ThisFolderSubfoldersAndFiles"',
+      '  Ensure-TechHubFolderPermission -Path $Path -Identity $Owner -Right "RX,WD,AD" -AppliesTo "ThisFolderOnly"',
+      '  Ensure-TechHubFolderPermission -Path $Path -Identity $Owner -Right "M" -AppliesTo "SubfoldersAndFilesOnly"',
       '  icacls "$Path" /setowner "$ownerId" | Out-Null',
       '  if ($LASTEXITCODE -ne 0) { throw ("Falha no icacls (setowner) em " + $Path + " para " + $ownerId + ". Código: " + $LASTEXITCODE) }',
+      '  Write-TechHubLog -Level "INFO" -Message ("HomeFolder: preparada para " + $Owner + " em " + $Path)',
       '}',
     ].join('\n');
+
+    const scriptBodyLines = [
+      `Import-Module ActiveDirectory -ErrorAction Stop`,
+      `Import-Module GroupPolicy -ErrorAction Stop`,
+      `$script:TechHubDomainNetbios = (Get-ADDomain -ErrorAction Stop).NetBIOSName`,
+      `Write-TechHubStep "Domínio (NetBIOS): $script:TechHubDomainNetbios"`,
+      '',
+      `Write-TechHubStep "Iniciando bloco: Estrutura raiz do projeto no AD"`,
+      '# Estrutura raiz do projeto no AD',
+      `Ensure-TechHubOu -Name "${psEscape(rootOuName)}" -Path "${psEscape(domainDn)}"`,
+      `Ensure-TechHubOu -Name "SETORES" -Path "${psEscape(rootOuDn)}"`,
+      `Ensure-TechHubOu -Name "FILESERVER" -Path "${psEscape(rootOuDn)}"`,
+      '',
+      `Write-TechHubStep "Iniciando bloco: Estrutura organizacional"`,
+      '# Estrutura organizacional',
+      ...orgLines,
+      '',
+      `Write-TechHubStep "Iniciando bloco: OUs auxiliares"`,
+      '# OUs',
+      ...ouLines,
+      '',
+      ...folderOuLines,
+      '',
+      `Write-TechHubStep "Iniciando bloco: Grupos"`,
+      '# Grupos',
+      ...groupLines,
+      '',
+      `Write-TechHubStep "Iniciando bloco: Inclusões (nesting)"`,
+      '# Inclusões (nesting)',
+      ...groupNestingLines,
+      '',
+      `Write-TechHubStep "Iniciando bloco: Usuários"`,
+      '# Usuarios',
+      ...userLines,
+      '',
+      `Write-TechHubStep "Iniciando bloco: Pastas e permissões"`,
+      '# Pastas e permissoes',
+      `Ensure-TechHubFolder -Path "$RootPath"`,
+      `Ensure-TechHubDisableInheritance -Path "$RootPath" -Mode "r"`,
+      `Ensure-TechHubAdministratorsFullControl -Path "$RootPath"`,
+      `Ensure-TechHubSystemFullControl -Path "$RootPath"`,
+      `Ensure-TechHubCreatorOwnerFullControl -Path "$RootPath"`,
+      `Ensure-TechHubFolderPermission -Path "$RootPath" -Identity "${psEscape(rootGfName)}" -Right "RX" -AppliesTo "ThisFolderOnly"`,
+      ...folderLines,
+      '',
+      `Write-TechHubStep "Iniciando bloco: GPOs"`,
+      '# GPOs',
+      ...gpoLines,
+      '',
+    ];
 
     const script = [
       '# Tech Hub - AD / File Server V1',
@@ -812,42 +1248,22 @@ export class AdfsService {
       `$UserHomeLocalRoot = "${psEscape(userHomeLocalRoot)}"`,
       `$UserHomeShareRoot = "${psEscape(userHomeShareRoot)}"`,
       `$ErrorActionPreference = "Stop"`,
-      `Import-Module ActiveDirectory -ErrorAction Stop`,
-      `Import-Module GroupPolicy -ErrorAction Stop`,
-      `$script:TechHubDomainNetbios = (Get-ADDomain -ErrorAction Stop).NetBIOSName`,
-      `Write-TechHubStep "Domínio (NetBIOS): $script:TechHubDomainNetbios"`,
       '',
-      '# Estrutura raiz do projeto no AD',
-      `Ensure-TechHubOu -Name "${psEscape(rootOuName)}" -Path "${psEscape(domainDn)}"`,
-      `Ensure-TechHubOu -Name "SETORES" -Path "${psEscape(rootOuDn)}"`,
-      `Ensure-TechHubOu -Name "FILESERVER" -Path "${psEscape(rootOuDn)}"`,
-      '',
-      '# Estrutura organizacional',
-      ...orgLines,
-      '',
-      '# OUs',
-      ...ouLines,
-      '',
-      '# Grupos',
-      ...groupLines,
-      '',
-      '# Inclusões (nesting)',
-      ...groupNestingLines,
-      '',
-      '# Usuarios',
-      ...userLines,
-      '',
-      '# Pastas e permissoes',
-      `Ensure-TechHubFolder -Path "$RootPath"`,
-      `Ensure-TechHubDisableInheritance -Path "$RootPath" -Mode "r"`,
-      `Ensure-TechHubAdministratorsFullControl -Path "$RootPath"`,
-      `Ensure-TechHubSystemFullControl -Path "$RootPath"`,
-      `Ensure-TechHubCreatorOwnerFullControl -Path "$RootPath"`,
-      `Ensure-TechHubFolderPermission -Path "$RootPath" -Identity "${psEscape(rootGfName)}" -Right "RX" -AppliesTo "ThisFolderOnly"`,
-      ...folderLines,
-      '',
-      '# GPOs',
-      ...gpoLines,
+      `Initialize-TechHubLog`,
+      `Write-TechHubLog -Level "INFO" -Message ("Início da execução do projeto " + $ProjectName)`,
+      `try {`,
+      ...scriptBodyLines.map((line) => (line ? `  ${line}` : '')),
+      `} catch {`,
+      `  $techHubError = if ($_.Exception) { $_.Exception.Message } else { ($_ | Out-String).Trim() }`,
+      `  Write-TechHubLog -Level "ERROR" -Message ("Falha na execução: " + $techHubError)`,
+      `  Write-Host ("[TechHub][ERRO] " + $techHubError) -ForegroundColor Red`,
+      `  throw`,
+      `} finally {`,
+      `  Write-TechHubLog -Level "INFO" -Message "Fim da execução."`,
+      `  if (!([string]::IsNullOrWhiteSpace($script:TechHubLogPath))) {`,
+      `    Write-Host ("[TechHub] Log salvo em: " + $script:TechHubLogPath)`,
+      `  }`,
+      `}`,
       '',
     ].join('\n');
 

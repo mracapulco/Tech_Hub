@@ -294,6 +294,21 @@ export class AdfsController {
     return { ok: true, data };
   }
 
+  @Post('folders/with-groups')
+  async createFolderWithGroups(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.isClient)) return { ok: false, error: 'Forbidden' };
+    const access = await this.canAccessProject(String(body?.projectId || ''), ctx);
+    if (!access.ok) return access;
+    try {
+      const data = await this.svc.createFolderWithGroups(body);
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Falha ao criar pasta com grupos' };
+    }
+  }
+
   @Get('folders')
   async folders(@Query('projectId') projectId: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getContext(authorization);
