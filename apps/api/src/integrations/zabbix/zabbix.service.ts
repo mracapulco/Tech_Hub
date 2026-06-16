@@ -9,6 +9,11 @@ type ZabbixConfig = { url: string; token: string; groupPrefix?: string };
 export class ZabbixService {
   constructor(private readonly prisma: PrismaService, private readonly settings: SettingsService) {}
 
+  private getRpcErrorMessage(response: any, fallback: string): string {
+    const message = String(response?.error?.data || response?.error?.message || '').trim();
+    return message || fallback;
+  }
+
   async setConfig(companyId: string, cfg: ZabbixConfig, updatedBy?: string) {
     if (!cfg?.url || !cfg?.token) return { ok: false, error: 'url e token são obrigatórios' };
     await this.settings.setZabbixConfig(companyId, cfg, updatedBy);
@@ -19,6 +24,16 @@ export class ZabbixService {
     const cfg = (await this.settings.getZabbixConfig(companyId)) as ZabbixConfig | null;
     if (!cfg) return null;
     return { url: cfg.url, groupPrefix: cfg.groupPrefix, maskedToken: cfg.token ? `${cfg.token.slice(0,3)}****${cfg.token.slice(-4)}` : '****' };
+  }
+
+  private async getCompanyConfig(companyId: string) {
+    const cfg = (await this.settings.getZabbixConfig(companyId)) as ZabbixConfig | null;
+    if (!cfg?.url || !cfg?.token) return null;
+    return {
+      cfg,
+      url: cfg.url.replace(/\/$/, '') + '/api_jsonrpc.php',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.token}` } as Record<string, string>,
+    };
   }
 
   private parseCidr(cidr: string) {
@@ -69,15 +84,19 @@ export class ZabbixService {
     }
   }
 
-  async sync(companyId: string, debug?: boolean, dnsFallback?: boolean) {
-    const cfg = (await this.settings.getZabbixConfig(companyId)) as ZabbixConfig | null;
-    if (!cfg) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
-    const url = cfg.url.replace(/\/$/, '') + '/api_jsonrpc.php';
-    const headers: any = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.token}` };
+  private async getGroupIds(companyId: string): Promise<{ cfg: ZabbixConfig; url: string; headers: Record<string, string>; groupIds: string[] } | null> {
+    const base = await this.getCompanyConfig(companyId);
+    if (!base) return null;
+    const { cfg, url, headers } = base;
     let groupIds: string[] = [];
     if (cfg.groupPrefix) {
       try {
-        const gpPayload = { jsonrpc: '2.0', method: 'hostgroup.get', params: { output: ['groupid', 'name'], search: { name: cfg.groupPrefix }, searchWildcardsEnabled: true }, id: 1 };
+        const gpPayload = {
+          jsonrpc: '2.0',
+          method: 'hostgroup.get',
+          params: { output: ['groupid', 'name'], search: { name: cfg.groupPrefix }, searchWildcardsEnabled: true },
+          id: 1,
+        };
         const gpData = await this.postJson(url, headers, gpPayload, 10000);
         const groups: any[] = Array.isArray(gpData?.result) ? gpData.result : [];
         groupIds = groups.map((g: any) => String(g.groupid)).filter(Boolean);
@@ -85,6 +104,243 @@ export class ZabbixService {
         groupIds = [];
       }
     }
+    return { cfg, url, headers, groupIds };
+  }
+
+  async listHostsWithItem(companyId: string, itemKey: string) {
+    const scoped = await this.getGroupIds(companyId);
+    if (!scoped) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
+    const { cfg, url, headers, groupIds } = scoped;
+    const hostParams: any = {
+      output: ['hostid', 'host', 'name', 'status'],
+      sortfield: ['name'],
+      sortorder: 'ASC',
+    };
+    if (groupIds.length > 0) hostParams.groupids = groupIds;
+    const hostPayload = { jsonrpc: '2.0', method: 'host.get', params: hostParams, id: 2 };
+    const hostData = await this.postJson(url, headers, hostPayload, 15000);
+    let hosts: any[] = Array.isArray(hostData?.result) ? hostData.result : [];
+    const prefix = (cfg.groupPrefix || '').trim().replace(/\/+$/, '');
+    if (prefix) {
+      const groupPayload = {
+        jsonrpc: '2.0',
+        method: 'host.get',
+        params: {
+          output: ['hostid', 'host', 'name', 'status'],
+          selectGroups: ['groupid', 'name'],
+          ...(groupIds.length > 0 ? { groupids: groupIds } : {}),
+        },
+        id: 3,
+      };
+      const groupData = await this.postJson(url, headers, groupPayload, 15000);
+      const withGroups: any[] = Array.isArray(groupData?.result) ? groupData.result : [];
+      hosts = withGroups.filter((host: any) => {
+        const groups: any[] = Array.isArray(host?.groups) ? host.groups : [];
+        return groups.some((group: any) => {
+          const name = String(group?.name || '').trim();
+          return name === prefix || name.startsWith(prefix + '/');
+        });
+      });
+    }
+    const hostIds = hosts.map((host: any) => String(host.hostid)).filter(Boolean);
+    if (hostIds.length === 0) return { ok: true, data: [] };
+    const itemPayload = {
+      jsonrpc: '2.0',
+      method: 'item.get',
+      params: {
+        output: ['itemid', 'hostid', 'key_', 'lastclock'],
+        hostids: hostIds,
+        filter: { key_: [itemKey] },
+        monitored: true,
+      },
+      id: 4,
+    };
+    const itemData = await this.postJson(url, headers, itemPayload, 15000);
+    const items: any[] = Array.isArray(itemData?.result) ? itemData.result : [];
+    const itemsByHostId = new Map<string, any>();
+    for (const item of items) {
+      const hostId = String(item?.hostid || '');
+      const current = itemsByHostId.get(hostId);
+      if (!current || Number(item?.lastclock || 0) > Number(current?.lastclock || 0)) {
+        itemsByHostId.set(hostId, item);
+      }
+    }
+    const data = hosts
+      .filter((host: any) => itemsByHostId.has(String(host.hostid)))
+      .map((host: any) => {
+        const item = itemsByHostId.get(String(host.hostid));
+        return {
+          hostId: String(host.hostid),
+          host: String(host.host || ''),
+          name: String(host.name || host.host || ''),
+          status: String(host.status || ''),
+          itemId: String(item?.itemid || ''),
+          lastClock: Number(item?.lastclock || 0),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { ok: true, data };
+  }
+
+  async getHostItemLastValue(companyId: string, hostId: string, itemKey: string) {
+    const scoped = await this.getGroupIds(companyId);
+    if (!scoped) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
+    const { url, headers } = scoped;
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'item.get',
+      params: {
+        output: ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'lastclock'],
+        hostids: [hostId],
+        filter: { key_: [itemKey] },
+        monitored: true,
+        sortfield: 'lastclock',
+        sortorder: 'DESC',
+        limit: 1,
+      },
+      id: 5,
+    };
+    const data = await this.postJson(url, headers, payload, 15000);
+    const item = Array.isArray(data?.result) ? data.result[0] : null;
+    if (!item?.itemid) return { ok: false, error: 'Item não encontrado para o host selecionado.' };
+    return {
+      ok: true,
+      data: {
+        itemId: String(item.itemid),
+        hostId: String(item.hostid || hostId),
+        key: String(item.key_ || itemKey),
+        name: String(item.name || ''),
+        lastValue: String(item.lastvalue || ''),
+        lastClock: Number(item.lastclock || 0),
+      },
+    };
+  }
+
+  async getItemLastValueById(companyId: string, itemId: string) {
+    const scoped = await this.getGroupIds(companyId);
+    if (!scoped) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
+    const { url, headers } = scoped;
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'item.get',
+      params: {
+        output: ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'lastclock'],
+        itemids: [itemId],
+      },
+      id: 6,
+    };
+    const data = await this.postJson(url, headers, payload, 15000);
+    const item = Array.isArray(data?.result) ? data.result[0] : null;
+    if (!item?.itemid) return { ok: false, error: 'Item não encontrado para o host selecionado.' };
+    return {
+      ok: true,
+      data: {
+        itemId: String(item.itemid),
+        hostId: String(item.hostid || ''),
+        key: String(item.key_ || ''),
+        name: String(item.name || ''),
+        lastValue: String(item.lastvalue || ''),
+        lastClock: Number(item.lastclock || 0),
+      },
+    };
+  }
+
+  async getValidatedItem(
+    companyId: string,
+    input: { hostId?: string; itemId?: string; itemKey?: string },
+  ) {
+    const scoped = await this.getGroupIds(companyId);
+    if (!scoped) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
+    const { url, headers } = scoped;
+    const buildItem = (item: any) => ({
+      itemId: String(item.itemid),
+      hostId: String(item.hostid || input.hostId || ''),
+      key: String(item.key_ || ''),
+      name: String(item.name || ''),
+      status: String(item.status ?? ''),
+      state: String(item.state ?? ''),
+      error: String(item.error || ''),
+      valueType: Number(item.value_type ?? -1),
+    });
+    const requestItem = async (params: Record<string, any>, requestId: number) => {
+      const payload = {
+        jsonrpc: '2.0',
+        method: 'item.get',
+        params,
+        id: requestId,
+      };
+      const data = await this.postJson(url, headers, payload, 15000);
+      if (data?.error) {
+        return { ok: false as const, error: this.getRpcErrorMessage(data, 'Falha ao consultar item no Zabbix.') };
+      }
+      const items = Array.isArray(data?.result) ? data.result : [];
+      return { ok: true as const, data: items };
+    };
+    const baseParams: any = {
+      output: ['itemid', 'hostid', 'name', 'key_', 'status', 'state', 'error', 'value_type'],
+    };
+    if (input.hostId) baseParams.hostids = [input.hostId];
+    if (input.itemKey) baseParams.filter = { key_: [input.itemKey] };
+
+    let items: any[] = [];
+    if (input.itemId) {
+      const primaryParams = { ...baseParams, itemids: [input.itemId] };
+      const primary = await requestItem(primaryParams, 7);
+      if (!primary.ok) return primary;
+      items = primary.data;
+    }
+    if (items.length === 0 && input.hostId && input.itemKey) {
+      const fallback = await requestItem(baseParams, 71);
+      if (!fallback.ok) return fallback;
+      items = fallback.data;
+    }
+    if (items.length === 0 && !input.hostId && input.itemId) {
+      const byItemId = await requestItem({ ...baseParams, itemids: [input.itemId] }, 72);
+      if (!byItemId.ok) return byItemId;
+      items = byItemId.data;
+    }
+    const item = items[0] || null;
+    if (!item?.itemid) return { ok: false, error: 'Item veeam.get.metrics não encontrado para o host selecionado.' };
+    return { ok: true, data: buildItem(item) };
+  }
+
+  async getItemTextHistory(companyId: string, itemId: string) {
+    const scoped = await this.getGroupIds(companyId);
+    if (!scoped) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
+    const { url, headers } = scoped;
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'history.get',
+      params: {
+        output: 'extend',
+        history: 4,
+        itemids: [itemId],
+        sortfield: 'clock',
+        sortorder: 'DESC',
+        limit: 1,
+      },
+      id: 8,
+    };
+    const data = await this.postJson(url, headers, payload, 15000);
+    if (data?.error) {
+      return { ok: false, error: this.getRpcErrorMessage(data, 'Falha ao consultar histórico do item no Zabbix.') };
+    }
+    const rows: any[] = Array.isArray(data?.result) ? data.result : [];
+    return {
+      ok: true,
+      data: rows.map((row: any) => ({
+        itemId: String(row.itemid || itemId),
+        clock: Number(row.clock || 0),
+        ns: Number(row.ns || 0),
+        value: String(row.value || ''),
+      })),
+    };
+  }
+
+  async sync(companyId: string, debug?: boolean, dnsFallback?: boolean) {
+    const scoped = await this.getGroupIds(companyId);
+    if (!scoped) return { ok: false, error: 'Configuração Zabbix ausente para a empresa.' };
+    const { cfg, url, headers, groupIds } = scoped;
     const params: any = {
       output: ['host', 'name', 'status'],
       selectInterfaces: ['ip', 'dns', 'useip'],

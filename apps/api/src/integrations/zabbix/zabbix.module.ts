@@ -9,5 +9,6 @@ import { AuthModule } from '../../auth/auth.module';
   imports: [AuthModule],
   controllers: [ZabbixController],
   providers: [PrismaService, SettingsService, ZabbixService],
+  exports: [ZabbixService],
 })
 export class ZabbixModule {}

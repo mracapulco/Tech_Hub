@@ -4,6 +4,26 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.4.2] — 2026-06-16
+
+### Adicionado
+- Gestão • Backup: novo relatório Veeam em rota dedicada, com linha do tempo diária baseada no histórico do item `veeam.get.metrics` do Zabbix.
+- Gestão • Backup: exportações CSV e PDF para o relatório, com PDF em layout horizontal, cabeçalho institucional e timeline visual para compartilhamento com clientes.
+- Sobre: tela atualizada com logo da plataforma, resumo institucional, versão atual e changelog da release exibida na instalação.
+
+### Alterado
+- Gestão • Backup: a página inicial do módulo passa a funcionar como hub de navegação, com entrada explícita para o relatório Veeam em vez de abrir o relatório diretamente.
+- Gestão • Backup: coluna `Resultado` removida da tabela web e das exportações, mantendo a leitura por cores na timeline e os cards de resumo.
+- Gestão • Backup: geração de PDF reformulada para seguir o padrão visual dos outros relatórios do Tech Hub.
+
+### Corrigido
+- Integração Zabbix • Backup: validação do item `veeam.get.metrics` e leitura do histórico texto com tratamento distinto para item não encontrado, item sem histórico, JSON inválido e ausência de `sessions.data`.
+- Gestão • Backup: timeline diária corrigida para tratar sessões cruzando o dia, execuções em andamento (`Running`), buckets de 15/30/60 minutos e formatação correta dos horários.
+- Exportações • Backup: CSV ajustado para compatibilidade com Excel/PT-BR e PDF ajustado para não depender de popup bloqueado.
+
+### Operacional
+- Versões atualizadas: root e web `0.4.2`.
+
 ## [0.4.1] — 2026-04-28
 
 ### Adicionado

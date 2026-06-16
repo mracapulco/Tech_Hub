@@ -1,9 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { ZabbixService } from '../integrations/zabbix/zabbix.service';
+import {
+  buildVeeamBackupTimeline,
+  type VeeamTimelineResultFilter,
+  type VeeamTimelineTypeFilter,
+} from './veeam-timeline';
 
 @Injectable()
 export class BackupService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly zabbixService: ZabbixService) {}
+
+  private logVeeamDebug(_message: string, _data: Record<string, any>) {}
 
   async overview(companyId: string) {
     const repos = await this.prisma.backupRepository.count({ where: { companyId } });
@@ -146,5 +154,140 @@ export class BackupService {
     }));
     const result = await this.prisma.backupRun.createMany({ data: insert });
     return { created: result.count || 0 };
+  }
+
+  async listVeeamHosts(companyId: string) {
+    return this.zabbixService.listHostsWithItem(companyId, 'veeam.get.metrics');
+  }
+
+  async getVeeamTimeline(input: {
+    companyId: string;
+    hostId: string;
+    itemId?: string;
+    date: string;
+    bucketMinutes?: number;
+    timezone?: string;
+    typeFilter?: VeeamTimelineTypeFilter;
+    resultFilter?: VeeamTimelineResultFilter;
+  }) {
+    this.logVeeamDebug('Iniciando geração da timeline', {
+      companyId: input.companyId,
+      hostId: input.hostId,
+      itemId: input.itemId || null,
+      reportDate: input.date,
+      bucketMinutes: input.bucketMinutes || 30,
+      typeFilter: input.typeFilter || 'all',
+      resultFilter: input.resultFilter || 'all',
+    });
+    const validatedItem = await this.zabbixService.getValidatedItem(input.companyId, {
+      hostId: input.hostId,
+      itemId: input.itemId,
+      itemKey: 'veeam.get.metrics',
+    });
+    this.logVeeamDebug('Resultado do item.get', {
+      companyId: input.companyId,
+      hostId: input.hostId,
+      itemId: input.itemId || null,
+      itemFound: !!validatedItem.ok,
+      itemData: validatedItem.ok ? validatedItem.data : null,
+    });
+    if (!validatedItem.ok || !validatedItem.data) return validatedItem;
+
+    const history = await this.zabbixService.getItemTextHistory(input.companyId, validatedItem.data.itemId);
+    const historyRows = history.ok && Array.isArray(history.data) ? history.data : [];
+    this.logVeeamDebug('Resultado do history.get', {
+      companyId: input.companyId,
+      hostId: input.hostId,
+      itemId: validatedItem.data.itemId,
+      historyRows: historyRows.length,
+      historyClock: historyRows[0]?.clock || null,
+    });
+    if (!history.ok) return history;
+    if (historyRows.length === 0) {
+      return {
+        ok: false,
+        error: 'Item veeam.get.metrics encontrado, mas sem histórico disponível. Execute a coleta no Zabbix ou verifique a retenção de histórico do item.',
+      };
+    }
+
+    const latest = historyRows[0];
+    let metricsJson: Record<string, any>;
+    try {
+      metricsJson = JSON.parse(String(latest.value || '{}'));
+      this.logVeeamDebug('Parse do JSON do histórico', {
+        companyId: input.companyId,
+        hostId: input.hostId,
+        itemId: validatedItem.data.itemId,
+        parseOk: true,
+      });
+    } catch {
+      this.logVeeamDebug('Parse do JSON do histórico', {
+        companyId: input.companyId,
+        hostId: input.hostId,
+        itemId: validatedItem.data.itemId,
+        parseOk: false,
+      });
+      return { ok: false, error: 'Histórico encontrado, mas o JSON do item veeam.get.metrics é inválido.' };
+    }
+
+    if (!Array.isArray(metricsJson?.sessions?.data)) {
+      this.logVeeamDebug('JSON sem sessions.data', {
+        companyId: input.companyId,
+        hostId: input.hostId,
+        itemId: validatedItem.data.itemId,
+        sessionsDataExists: false,
+      });
+      return { ok: false, error: 'JSON do item veeam.get.metrics não possui sessions.data.' };
+    }
+    this.logVeeamDebug('JSON com sessions.data', {
+      companyId: input.companyId,
+      hostId: input.hostId,
+      itemId: validatedItem.data.itemId,
+      sessionsTotal: Array.isArray(metricsJson.sessions.data) ? metricsJson.sessions.data.length : 0,
+    });
+
+    const timeline = buildVeeamBackupTimeline({
+      metricsJson,
+      reportDate: input.date,
+      bucketMinutes: input.bucketMinutes,
+      timezone: input.timezone || 'America/Sao_Paulo',
+      typeFilter: input.typeFilter || 'all',
+      resultFilter: input.resultFilter || 'all',
+      collectedAt: latest.clock ? Number(latest.clock) * 1000 : undefined,
+    });
+    this.logVeeamDebug('Timeline gerada', {
+      companyId: input.companyId,
+      hostId: input.hostId,
+      itemId: validatedItem.data.itemId,
+      sessionsTotal: timeline.debug.sessionsTotal,
+      sessionsAfterTypeFilter: timeline.debug.sessionsAfterTypeFilter,
+      sessionsCrossingReportDate: timeline.debug.sessionsCrossingReportDate,
+      rowsGenerated: timeline.meta.rows,
+    });
+
+    const message =
+      timeline.debug.sessionsCrossingReportDate === 0
+        ? 'JSON válido, mas não há sessões para a data selecionada.'
+        : timeline.meta.sessionsConsidered === 0
+          ? 'Há sessões para a data selecionada, mas nenhuma atende aos filtros aplicados.'
+          : '';
+
+    return {
+      ok: true,
+      data: {
+        ...timeline,
+        meta: {
+          ...timeline.meta,
+          zabbixItemId: validatedItem.data.itemId,
+          zabbixHistoryClock: latest.clock,
+        },
+        host: {
+          hostId: validatedItem.data.hostId || input.hostId,
+          itemId: validatedItem.data.itemId,
+          lastClock: latest.clock,
+        },
+        message,
+      },
+    };
   }
 }

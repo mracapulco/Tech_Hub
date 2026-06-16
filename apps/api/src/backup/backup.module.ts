@@ -5,6 +5,7 @@ import { BackupController } from './backup.controller';
 import { BackupService } from './backup.service';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
+import { ZabbixModule } from '../integrations/zabbix/zabbix.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
     }),
     SettingsModule,
     AuthModule,
+    ZabbixModule,
   ],
   controllers: [BackupController],
   providers: [PrismaService, BackupService],

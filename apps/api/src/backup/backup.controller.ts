@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Param, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { BackupService } from './backup.service';
@@ -84,6 +84,51 @@ export class BackupController {
     const dt = since ? new Date(since) : undefined;
     const data = await this.svc.listRuns(companyId, dt);
     return { ok: true, data };
+  }
+
+  @Get('veeam/hosts')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async veeamHosts(@Query('companyId') companyId: string, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
+    return this.svc.listVeeamHosts(companyId);
+  }
+
+  @Get('veeam/timeline')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async veeamTimeline(
+    @Query('companyId') companyId: string,
+    @Query('hostId') hostId: string,
+    @Query('itemId') itemId: string | undefined,
+    @Query('date') date: string,
+    @Query('bucketMinutes') bucketMinutes?: string,
+    @Query('timezone') timezone?: string,
+    @Query('type') type?: string,
+    @Query('result') result?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
+    if (!companyId || (!hostId && !itemId) || !date) return { ok: false, error: 'companyId, hostId/itemId e date são obrigatórios' };
+    const safeBucketMinutes = [15, 30, 60].includes(Number(bucketMinutes)) ? Number(bucketMinutes) : 30;
+    const safeType = ['all', 'Backup', 'Replica'].includes(String(type || 'all')) ? String(type || 'all') : 'all';
+    const safeResult = ['all', 'Success', 'Failed', 'Warning', 'Running', 'Unknown'].includes(String(result || 'all')) ? String(result || 'all') : 'all';
+    return this.svc.getVeeamTimeline({
+      companyId,
+      hostId,
+      itemId,
+      date,
+      bucketMinutes: safeBucketMinutes,
+      timezone: timezone || 'America/Sao_Paulo',
+      typeFilter: safeType as any,
+      resultFilter: safeResult as any,
+    });
   }
 
   @Post('calc/repository')
