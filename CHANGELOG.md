@@ -6,6 +6,22 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 
 ## [0.4.2] — 2026-06-16
 
+## [0.4.3] — 2026-06-17
+
+### Alterado
+- Gestão • Backup: tela `Repositórios / Planejamento` passa a permitir escolha da data do snapshot para leitura do histórico do `veeam.get.metrics`.
+- Gestão • Backup: estimativas de tempo dos cenários passam a separar comportamento do incremental diário e do full semanal, refletindo melhor diferenças entre `Incremental`, `Synthetic Full` e `Active Full`.
+- Gestão • Backup: busca de snapshots para planejamento agora aceita fallback para o histórico mais recente anterior ou igual à data escolhida, com aviso visual na interface quando houver reaproveitamento.
+
+### Corrigido
+- Web • Layout: menu do usuário no canto superior direito agora fecha ao clicar fora, ao navegar para outra tela e ao acionar itens do próprio menu.
+- Gestão • Backup: bloco de `Simulação detalhada da rotina` removido da tela de planejamento, evitando duplicidade com os cards de cenário.
+
+### Operacional
+- Versões atualizadas: root e web `0.4.3`.
+
+## [0.4.2] — 2026-06-16
+
 ### Adicionado
 - Gestão • Backup: novo relatório Veeam em rota dedicada, com linha do tempo diária baseada no histórico do item `veeam.get.metrics` do Zabbix.
 - Gestão • Backup: exportações CSV e PDF para o relatório, com PDF em layout horizontal, cabeçalho institucional e timeline visual para compartilhamento com clientes.

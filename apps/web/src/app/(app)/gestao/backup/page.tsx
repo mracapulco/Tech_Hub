@@ -19,10 +19,10 @@ export default function BackupOverviewPage() {
               Gere a linha do tempo diária das execuções, aplique filtros e exporte em CSV ou PDF.
             </p>
           </Link>
-          <Link href="/gestao/backup/repositorios" className="rounded border border-border bg-white p-4 shadow-sm transition hover:border-gray-300 hover:bg-gray-50">
-            <div className="text-base font-semibold text-primary">Gerir Repositórios</div>
+          <Link href="/gestao/backup/repositorios" className="rounded border border-border bg-white p-4 shadow-sm transition hover:border-blue-300 hover:bg-blue-50">
+            <div className="text-base font-semibold text-primary">Repositórios / Planejamento</div>
             <p className="mt-2 text-sm text-muted">
-              Consulte e organize os repositórios de backup cadastrados no módulo.
+              Cruce dados automáticos do Zabbix com overrides manuais e simule retenção por repositório.
             </p>
           </Link>
           <Link href="/gestao/backup/proxies" className="rounded border border-border bg-white p-4 shadow-sm transition hover:border-gray-300 hover:bg-gray-50">

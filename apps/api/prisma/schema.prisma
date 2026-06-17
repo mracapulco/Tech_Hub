@@ -54,6 +54,8 @@ model Company {
   backupProxies BackupProxy[]
   backupCores BackupCore[]
   backupJobs BackupJob[]
+  backupRepositoryOverrides BackupRepositoryOverride[]
+  backupRepositoryJobOverrides BackupRepositoryJobOverride[]
   backupSummaries BackupSummaryMonthly[]
   adFsProjects AdFsProject[]
 }
@@ -415,6 +417,64 @@ model BackupSummaryMonthly {
   updatedAt    DateTime @updatedAt
 
   @@unique([companyId, month])
+}
+
+model BackupRepositoryOverride {
+  id                  String   @id @default(uuid())
+  company             Company  @relation(fields: [companyId], references: [id])
+  companyId           String
+  zabbixHostId        String
+  repositoryId        String
+  repositoryName      String
+  repositoryType      String?
+  capacityGB          Float?
+  usedSpaceGB         Float?
+  freeGB              Float?
+  protectedSizeGB     Float?
+  fullBackupSizeGB    Float?
+  dailyChangePercent  Float?
+  currentRetentionDays Int?
+  retentionDays       Int?
+  dailyFrequency      Int?
+  backupMode          String?
+  safetyMarginPercent Float?
+  notes               String?
+  useManualForPlanning Boolean @default(false)
+  updatedBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([companyId, zabbixHostId, repositoryId])
+  @@index([companyId])
+  @@index([zabbixHostId])
+}
+
+model BackupRepositoryJobOverride {
+  id                  String   @id @default(uuid())
+  company             Company  @relation(fields: [companyId], references: [id])
+  companyId           String
+  zabbixHostId        String
+  repositoryId        String
+  jobId               String
+  jobName             String
+  protectedSizeGB     Float?
+  fullBackupSizeGB    Float?
+  dailyChangePercent  Float?
+  currentRetentionDays Int?
+  retentionDays       Int?
+  dailyFrequency      Int?
+  backupMode          String?
+  safetyMarginPercent Float?
+  notes               String?
+  useManualForPlanning Boolean @default(false)
+  updatedBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([companyId, zabbixHostId, repositoryId, jobId])
+  @@index([companyId])
+  @@index([zabbixHostId])
+  @@index([repositoryId])
 }
 
 enum AdFsNodeType {

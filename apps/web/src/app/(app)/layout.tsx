@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
@@ -17,6 +17,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const me = typeof window !== 'undefined' ? getUser() : null;
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const token = getToken();
@@ -24,6 +25,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace('/login');
     }
   }, [router]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (menuContainerRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [menuOpen]);
 
   const labelFromPath = (p: string | null): string => {
     if (!p) return 'Módulo';
@@ -45,7 +64,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 overflow-y-auto">
         <div className="h-10 flex items-center justify-between px-4 border-b border-border bg-white/80 relative">
           <div className="text-sm text-muted">{labelFromPath(pathname)}</div>
-          <div className="flex items-center gap-2">
+          <div ref={menuContainerRef} className="flex items-center gap-2">
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100"
@@ -62,9 +81,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             {menuOpen && (
               <div className="absolute right-4 top-10 w-44 bg-white border border-border rounded shadow z-50">
-                <Link href="/perfil" className="block px-3 py-2 text-sm hover:bg-gray-100">Perfil</Link>
-                <Link href="/sobre" className="block px-3 py-2 text-sm hover:bg-gray-100">Sobre</Link>
-                <button onClick={handleLogout} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-100">Sair</button>
+                <Link href="/perfil" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-gray-100">Perfil</Link>
+                <Link href="/sobre" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-gray-100">Sobre</Link>
+                <button onClick={() => { setMenuOpen(false); handleLogout(); }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-100">Sair</button>
               </div>
             )}
           </div>

@@ -49,6 +49,14 @@ type TimelinePayload = {
   message?: string;
 };
 
+const RESULT_LABELS: Record<TimelineResult, string> = {
+  Success: "Sucesso",
+  Failed: "Falha",
+  Warning: "Aviso",
+  Running: "Em execução",
+  Unknown: "Desconhecido",
+};
+
 function getTodayInSaoPaulo() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -87,6 +95,15 @@ function formatDateTime(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString("pt-BR");
+}
+
+function getResultLabel(result: TimelineResult) {
+  return RESULT_LABELS[result] || result;
+}
+
+function getBucketLabelLines(label: string) {
+  const [hours = label, minutes = ""] = label.split(":");
+  return { hours, minutes };
 }
 
 function imgUrl(u?: string | null) {
@@ -144,7 +161,7 @@ function buildCsvContent(timeline: TimelinePayload) {
       row.sessionCount,
       formatDateTime(row.firstStart),
       formatDateTime(row.lastEnd),
-      ...row.buckets.map((bucket) => (bucket.active ? bucket.result || "Ativo" : "")),
+        ...row.buckets.map((bucket) => (bucket.active ? (bucket.result ? getResultLabel(bucket.result) : "Ativo") : "")),
     ];
     lines.push(values.map(escapeCsv).join(";"));
   }
@@ -156,10 +173,9 @@ function buildPdfHtml(input: {
   title: string;
   companyLabel: string;
   companyLogo?: string;
-  hostLabel: string;
   timeline: TimelinePayload;
 }) {
-  const { title, companyLabel, companyLogo, hostLabel, timeline } = input;
+  const { title, companyLabel, companyLogo, timeline } = input;
   const bucketCount = timeline.rows[0]?.buckets.length || 0;
   const majorStep = Math.max(1, Math.round(120 / Math.max(15, timeline.meta.bucketMinutes)));
   const scaleLabels = timeline.rows[0]?.buckets
@@ -181,11 +197,9 @@ function buildPdfHtml(input: {
         <tr>
           <td class="routine-cell">
             <div class="routine-name">${escapeHtml(row.name)}</div>
-            <div class="routine-meta">${escapeHtml(`${row.sessionCount} sessão(ões)`)}</div>
           </td>
-          <td>${escapeHtml(row.type)}</td>
-          <td>${escapeHtml(`${formatDateTime(row.firstStart)} - ${formatDateTime(row.lastEnd)}`)}</td>
-          <td>
+          <td class="type-cell">${escapeHtml(row.type)}</td>
+          <td class="timeline-column">
             <div class="timeline-grid" style="grid-template-columns: repeat(${Math.max(1, bucketCount)}, minmax(0, 1fr));">
               ${timelineCells}
             </div>
@@ -241,7 +255,7 @@ function buildPdfHtml(input: {
           }
           .info-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
             margin-top: 14px;
           }
@@ -311,7 +325,7 @@ function buildPdfHtml(input: {
             font-weight: 700;
             margin: 16px 0 8px;
           }
-          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          table { width: 100%; border-collapse: collapse; table-layout: auto; }
           th, td { border: 1px solid #dbe2ea; padding: 8px; vertical-align: top; }
           th {
             background: #f8fafc;
@@ -323,21 +337,42 @@ function buildPdfHtml(input: {
             font-size: 11px;
             color: #111827;
           }
-          .routine-cell { width: 18%; }
-          .routine-name { font-weight: 700; margin-bottom: 4px; }
-          .routine-meta { font-size: 10px; color: #6b7280; }
+          .routine-cell, .routine-heading {
+            width: 1%;
+            white-space: nowrap;
+          }
+          .type-cell, .type-heading {
+            width: 1%;
+            white-space: nowrap;
+            text-align: center;
+            vertical-align: middle;
+            font-weight: 600;
+          }
+          .timeline-heading, .timeline-column { width: auto; }
+          .routine-name { font-weight: 700; }
           .scale-grid, .timeline-grid {
             display: grid;
             gap: 2px;
             width: 100%;
           }
-          .scale-wrap {
-            margin-top: 8px;
-            margin-bottom: 8px;
-            margin-left: calc(18% + 10% + 16% + 26px);
+          .timeline-heading {
+            padding: 0;
+            vertical-align: bottom;
+          }
+          .timeline-heading-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px;
+          }
+          .timeline-heading-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #374151;
+            text-align: left;
           }
           .scale-label {
-            font-size: 8px;
+            font-size: 7px;
             color: #6b7280;
             text-align: center;
             line-height: 1;
@@ -390,13 +425,7 @@ function buildPdfHtml(input: {
 
           <div class="info-grid">
             <div class="info-card"><span class="label">Cliente</span><div class="value">${escapeHtml(companyLabel)}</div></div>
-            <div class="info-card"><span class="label">Host Veeam / Zabbix</span><div class="value">${escapeHtml(hostLabel)}</div></div>
             <div class="info-card"><span class="label">Data do relatório</span><div class="value">${escapeHtml(timeline.meta.date)}</div></div>
-            <div class="info-card"><span class="label">Escala</span><div class="value">${escapeHtml(timeline.meta.bucketMinutes)} minutos</div></div>
-            <div class="info-card"><span class="label">Item Zabbix</span><div class="value">${escapeHtml(timeline.meta.zabbixItemId || "-")}</div></div>
-            <div class="info-card"><span class="label">Histórico coletado</span><div class="value">${escapeHtml(timeline.meta.zabbixHistoryClock ? formatLastClock(timeline.meta.zabbixHistoryClock) : "-")}</div></div>
-            <div class="info-card"><span class="label">Fonte</span><div class="value">${escapeHtml(timeline.meta.source)}</div></div>
-            <div class="info-card"><span class="label">Gerado em</span><div class="value">${escapeHtml(new Date().toLocaleString("pt-BR"))}</div></div>
           </div>
 
           <div class="intro">
@@ -406,32 +435,33 @@ function buildPdfHtml(input: {
           <div class="metrics">
             <div class="metric-card"><span class="label">Total de rotinas</span><div class="metric-number">${escapeHtml(timeline.meta.rows)}</div></div>
             <div class="metric-card"><span class="label">Total de sessões</span><div class="metric-number">${escapeHtml(timeline.meta.sessionsConsidered)}</div></div>
-            <div class="metric-card"><span class="label">Success</span><div class="metric-number" style="color:#166534;">${escapeHtml(timeline.summary.byResult.Success)}</div></div>
-            <div class="metric-card"><span class="label">Failed</span><div class="metric-number" style="color:#b91c1c;">${escapeHtml(timeline.summary.byResult.Failed)}</div></div>
-            <div class="metric-card"><span class="label">Warning</span><div class="metric-number" style="color:#a16207;">${escapeHtml(timeline.summary.byResult.Warning)}</div></div>
-            <div class="metric-card"><span class="label">Running</span><div class="metric-number" style="color:#1d4ed8;">${escapeHtml(timeline.summary.byResult.Running)}</div></div>
+            <div class="metric-card"><span class="label">Sucesso</span><div class="metric-number" style="color:#166534;">${escapeHtml(timeline.summary.byResult.Success)}</div></div>
+            <div class="metric-card"><span class="label">Falha</span><div class="metric-number" style="color:#b91c1c;">${escapeHtml(timeline.summary.byResult.Failed)}</div></div>
+            <div class="metric-card"><span class="label">Aviso</span><div class="metric-number" style="color:#a16207;">${escapeHtml(timeline.summary.byResult.Warning)}</div></div>
+            <div class="metric-card"><span class="label">Em execução</span><div class="metric-number" style="color:#1d4ed8;">${escapeHtml(timeline.summary.byResult.Running)}</div></div>
           </div>
 
           <div class="section-title">Linha do tempo das rotinas</div>
           <div class="legend">
-            <span class="legend-item"><span class="legend-swatch" style="background:#22c55e;border-color:#22c55e;"></span>Success</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#ef4444;border-color:#ef4444;"></span>Failed</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#facc15;border-color:#facc15;"></span>Warning</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#3b82f6;border-color:#3b82f6;"></span>Running</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#9ca3af;border-color:#9ca3af;"></span>Unknown</span>
-          </div>
-          <div class="scale-wrap">
-            <div class="scale-grid" style="grid-template-columns: repeat(${Math.max(1, bucketCount)}, minmax(0, 1fr));">
-              ${scaleLabels}
-            </div>
+            <span class="legend-item"><span class="legend-swatch" style="background:#22c55e;border-color:#22c55e;"></span>Sucesso</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#ef4444;border-color:#ef4444;"></span>Falha</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#facc15;border-color:#facc15;"></span>Aviso</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#3b82f6;border-color:#3b82f6;"></span>Em execução</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#9ca3af;border-color:#9ca3af;"></span>Desconhecido</span>
           </div>
           <table>
             <thead>
               <tr>
-                <th style="width:18%;">Rotina</th>
-                <th style="width:10%;">Tipo</th>
-                <th style="width:16%;">Janela</th>
-                <th>Timeline</th>
+                <th class="routine-heading">Rotina</th>
+                <th class="type-heading">Tipo</th>
+                <th class="timeline-heading">
+                  <div class="timeline-heading-wrap">
+                    <div class="timeline-heading-title">Timeline</div>
+                    <div class="scale-grid" style="grid-template-columns: repeat(${Math.max(1, bucketCount)}, minmax(0, 1fr));">
+                      ${scaleLabels}
+                    </div>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -444,6 +474,13 @@ function buildPdfHtml(input: {
             <span>Documento em orientação horizontal para leitura operacional da timeline</span>
           </div>
         </div>
+        <script>
+          window.addEventListener('load', function () {
+            window.setTimeout(function () {
+              window.print();
+            }, 500);
+          });
+        </script>
       </body>
     </html>
   `;
@@ -606,43 +643,18 @@ export default function BackupReportPage() {
       title: "Relatório de Backup Veeam",
       companyLabel: selectedCompanyLabel,
       companyLogo: companyLogoUrl,
-      hostLabel: selectedHost?.name || "Host não selecionado",
       timeline,
     });
     setError(null);
-
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    iframe.setAttribute("aria-hidden", "true");
-    document.body.appendChild(iframe);
-
-    const cleanup = () => {
-      window.setTimeout(() => {
-        iframe.remove();
-      }, 1000);
-    };
-
-    const frameWindow = iframe.contentWindow;
-    const frameDocument = iframe.contentDocument;
-    if (!frameWindow || !frameDocument) {
-      cleanup();
-      setError("Não foi possível preparar a exportação do PDF.");
+    const previewWindow = window.open("", "_blank");
+    if (!previewWindow) {
+      setError("O navegador bloqueou a abertura da aba do PDF. Permita pop-ups para este site e tente novamente.");
       return;
     }
-
-    frameDocument.open();
-    frameDocument.write(html);
-    frameDocument.close();
-    window.setTimeout(() => {
-      frameWindow.focus();
-      frameWindow.print();
-      cleanup();
-    }, 400);
+    previewWindow.document.open();
+    previewWindow.document.write(html);
+    previewWindow.document.close();
+    previewWindow.focus();
   }
 
   return (
@@ -755,11 +767,11 @@ export default function BackupReportPage() {
               className="w-full rounded border border-border px-3 py-2"
             >
               <option value="all">Todos</option>
-              <option value="Success">Success</option>
-              <option value="Failed">Failed</option>
-              <option value="Warning">Warning</option>
-              <option value="Running">Running</option>
-              <option value="Unknown">Unknown</option>
+              <option value="Success">Sucesso</option>
+              <option value="Failed">Falha</option>
+              <option value="Warning">Aviso</option>
+              <option value="Running">Em execução</option>
+              <option value="Unknown">Desconhecido</option>
             </select>
           </div>
         </div>
@@ -790,19 +802,19 @@ export default function BackupReportPage() {
           <div className="mt-1 text-2xl font-semibold">{timeline?.meta.sessionsConsidered ?? 0}</div>
         </div>
         <div className="rounded border border-border bg-card p-4 shadow">
-          <div className="text-xs text-muted">Success</div>
+          <div className="text-xs text-muted">Sucesso</div>
           <div className="mt-1 text-2xl font-semibold text-green-700">{timeline?.summary.byResult.Success ?? 0}</div>
         </div>
         <div className="rounded border border-border bg-card p-4 shadow">
-          <div className="text-xs text-muted">Failed</div>
+          <div className="text-xs text-muted">Falha</div>
           <div className="mt-1 text-2xl font-semibold text-red-700">{timeline?.summary.byResult.Failed ?? 0}</div>
         </div>
         <div className="rounded border border-border bg-card p-4 shadow">
-          <div className="text-xs text-muted">Warning</div>
+          <div className="text-xs text-muted">Aviso</div>
           <div className="mt-1 text-2xl font-semibold text-yellow-700">{timeline?.summary.byResult.Warning ?? 0}</div>
         </div>
         <div className="rounded border border-border bg-card p-4 shadow">
-          <div className="text-xs text-muted">Running</div>
+          <div className="text-xs text-muted">Em execução</div>
           <div className="mt-1 text-2xl font-semibold text-blue-700">{timeline?.summary.byResult.Running ?? 0}</div>
         </div>
         <div className="rounded border border-border bg-card p-4 shadow">
@@ -843,11 +855,17 @@ export default function BackupReportPage() {
             <table className="min-w-max border-separate border-spacing-0 text-sm">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-30 min-w-[280px] border-b border-r border-border bg-gray-50 px-3 py-2 text-left">Rotina</th>
-                  <th className="sticky z-30 min-w-[110px] border-b border-r border-border bg-gray-50 px-3 py-2 text-left" style={{ left: 280 }}>Tipo</th>
+                  <th className="sticky left-0 z-30 min-w-[180px] border-b border-r border-border bg-gray-50 px-3 py-2 text-left">Rotina</th>
+                  <th className="sticky z-30 min-w-[76px] border-b border-r border-border bg-gray-50 px-2 py-2 text-center" style={{ left: 180 }}>Tipo</th>
                   {timeline.rows[0]?.buckets.map((bucket) => (
-                    <th key={bucket.start} className="min-w-[58px] border-b border-r border-border bg-gray-50 px-2 py-2 text-center text-xs font-medium">
-                      {bucket.label}
+                    <th
+                      key={bucket.start}
+                      className="w-[30px] min-w-[30px] border-b border-r border-border bg-gray-50 px-1 py-2 text-center text-[10px] font-medium leading-none"
+                    >
+                      <span className="flex flex-col items-center">
+                        <span>{getBucketLabelLines(bucket.label).hours}</span>
+                        <span>{getBucketLabelLines(bucket.label).minutes}</span>
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -855,22 +873,17 @@ export default function BackupReportPage() {
               <tbody>
                 {timeline.rows.map((row) => (
                   <tr key={row.jobId}>
-                    <td className="sticky left-0 z-20 border-b border-r border-border bg-white px-3 py-2 align-top">
+                    <td className="sticky left-0 z-20 border-b border-r border-border bg-white px-3 py-2 align-middle">
                       <div className="font-medium">{row.name}</div>
-                      <div className="mt-1 text-xs text-muted">
-                        {row.sessionCount} sessão(ões) | {new Date(row.firstStart).toLocaleString("pt-BR")} até {new Date(row.lastEnd).toLocaleString("pt-BR")}
-                      </div>
                     </td>
-                    <td className="sticky z-20 border-b border-r border-border bg-white px-3 py-2 align-top" style={{ left: 280 }}>
-                      <span className="inline-flex rounded border border-border px-2 py-1 text-xs font-medium">
-                        {row.type}
-                      </span>
+                    <td className="sticky z-20 border-b border-r border-border bg-white px-2 py-2 text-center align-middle text-xs font-medium" style={{ left: 180 }}>
+                      {row.type}
                     </td>
                     {row.buckets.map((bucket) => (
-                      <td key={`${row.jobId}-${bucket.start}`} className="border-b border-r border-border px-1 py-1">
+                      <td key={`${row.jobId}-${bucket.start}`} className="border-b border-r border-border px-0.5 py-0.5">
                         <div
                           title={bucket.title}
-                          className={`h-8 w-full min-w-[54px] rounded ${cellClass(bucket.result, bucket.active)} ${bucket.active ? "cursor-help" : ""}`}
+                          className={`h-7 w-[30px] rounded-sm ${cellClass(bucket.result, bucket.active)} ${bucket.active ? "cursor-help" : ""}`}
                         />
                       </td>
                     ))}

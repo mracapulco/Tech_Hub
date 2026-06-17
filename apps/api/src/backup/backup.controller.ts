@@ -25,7 +25,7 @@ export class BackupController {
       const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
       const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
       const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      return { ok: true, isAdmin, isTechnician, allowedCompanyIds } as const;
+      return { ok: true, userId, isAdmin, isTechnician, allowedCompanyIds } as const;
     } catch {
       return { ok: false, error: 'Invalid token' } as const;
     }
@@ -97,6 +97,42 @@ export class BackupController {
     return this.svc.listVeeamHosts(companyId);
   }
 
+  @Get('veeam/repositories')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async veeamRepositories(
+    @Query('companyId') companyId: string,
+    @Query('hostId') hostId: string,
+    @Query('itemId') itemId: string | undefined,
+    @Query('date') date: string | undefined,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
+    if (!companyId || (!hostId && !itemId)) return { ok: false, error: 'companyId e hostId/itemId são obrigatórios' };
+    return this.svc.getVeeamRepositories({ companyId, hostId, itemId, date });
+  }
+
+  @Get('veeam/repositories/:repositoryId/jobs')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async veeamRepositoryJobs(
+    @Param('repositoryId') repositoryId: string,
+    @Query('companyId') companyId: string,
+    @Query('hostId') hostId: string,
+    @Query('itemId') itemId: string | undefined,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
+    if (!companyId || !hostId || !repositoryId) return { ok: false, error: 'companyId, hostId e repositoryId são obrigatórios' };
+    return this.svc.getVeeamRepositoryJobs({ companyId, hostId, itemId, repositoryId });
+  }
+
   @Get('veeam/timeline')
   @Header('Cache-Control', 'no-store')
   @Header('Pragma', 'no-cache')
@@ -128,6 +164,104 @@ export class BackupController {
       timezone: timezone || 'America/Sao_Paulo',
       typeFilter: safeType as any,
       resultFilter: safeResult as any,
+    });
+  }
+
+  @Post('veeam/repositories/override')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async saveVeeamRepositoryOverride(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(String(body?.companyId || '')))) {
+      return { ok: false, error: 'Forbidden' };
+    }
+    const companyId = String(body?.companyId || '');
+    const hostId = String(body?.hostId || '');
+    const repositoryId = String(body?.repositoryId || '');
+    const repositoryName = String(body?.repositoryName || '');
+    if (!companyId || !hostId || (!repositoryId && !repositoryName)) {
+      return { ok: false, error: 'companyId, hostId e repositoryId/repositoryName são obrigatórios' };
+    }
+    return this.svc.saveVeeamRepositoryOverride({
+      companyId,
+      hostId,
+      repositoryId,
+      repositoryName,
+      repositoryType: body?.repositoryType ? String(body.repositoryType) : undefined,
+      capacityGB: body?.capacityGB != null ? Number(body.capacityGB) : null,
+      usedSpaceGB: body?.usedSpaceGB != null ? Number(body.usedSpaceGB) : null,
+      freeGB: body?.freeGB != null ? Number(body.freeGB) : null,
+      notes: body?.notes ? String(body.notes) : null,
+      useManualForPlanning: Boolean(body?.useManualForPlanning),
+      updatedBy: ctx.userId,
+    });
+  }
+
+  @Post('veeam/repositories/job-override')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async saveVeeamRepositoryJobOverride(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(String(body?.companyId || '')))) {
+      return { ok: false, error: 'Forbidden' };
+    }
+    const companyId = String(body?.companyId || '');
+    const hostId = String(body?.hostId || '');
+    const repositoryId = String(body?.repositoryId || '');
+    const jobId = body?.jobId != null ? String(body.jobId) : undefined;
+    const jobName = String(body?.jobName || '');
+    if (!companyId || !hostId || !repositoryId || (!jobId && !jobName)) {
+      return { ok: false, error: 'companyId, hostId, repositoryId e jobId/jobName são obrigatórios' };
+    }
+    return this.svc.saveVeeamRepositoryJobOverride({
+      companyId,
+      hostId,
+      repositoryId,
+      jobId,
+      jobName,
+      protectedSizeGB: body?.protectedSizeGB != null ? Number(body.protectedSizeGB) : null,
+      fullBackupSizeGB: body?.fullBackupSizeGB != null ? Number(body.fullBackupSizeGB) : null,
+      dailyChangePercent: body?.dailyChangePercent != null ? Number(body.dailyChangePercent) : null,
+      currentRetentionDays: body?.currentRetentionDays != null ? Number(body.currentRetentionDays) : null,
+      retentionDays: body?.retentionDays != null ? Number(body.retentionDays) : null,
+      dailyFrequency: body?.dailyFrequency != null ? Number(body.dailyFrequency) : null,
+      backupMode: body?.backupMode ? String(body.backupMode) : null,
+      safetyMarginPercent: body?.safetyMarginPercent != null ? Number(body.safetyMarginPercent) : null,
+      notes: body?.notes ? String(body.notes) : null,
+      useManualForPlanning: Boolean(body?.useManualForPlanning),
+      updatedBy: ctx.userId,
+    });
+  }
+
+  @Post('veeam/repositories/simulate')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async simulateVeeamRepository(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    return this.svc.simulateVeeamRepository({
+      repositoryId: body?.repositoryId ? String(body.repositoryId) : undefined,
+      repositoryName: body?.repositoryName ? String(body.repositoryName) : undefined,
+      jobId: body?.jobId ? String(body.jobId) : undefined,
+      jobName: body?.jobName ? String(body.jobName) : undefined,
+      capacityGB: body?.capacityGB != null ? Number(body.capacityGB) : null,
+      usedSpaceGB: body?.usedSpaceGB != null ? Number(body.usedSpaceGB) : null,
+      freeGB: body?.freeGB != null ? Number(body.freeGB) : null,
+      protectedSizeGB: body?.protectedSizeGB != null ? Number(body.protectedSizeGB) : null,
+      fullBackupSizeGB: body?.fullBackupSizeGB != null ? Number(body.fullBackupSizeGB) : null,
+      dailyChangePercent: body?.dailyChangePercent != null ? Number(body.dailyChangePercent) : null,
+      currentRetentionDays: body?.currentRetentionDays != null ? Number(body.currentRetentionDays) : null,
+      retentionDays: body?.retentionDays != null ? Number(body.retentionDays) : null,
+      baseDailyFrequency: body?.baseDailyFrequency != null ? Number(body.baseDailyFrequency) : null,
+      dailyFrequency: body?.dailyFrequency != null ? Number(body.dailyFrequency) : null,
+      backupMode: body?.backupMode ? String(body.backupMode) : null,
+      safetyMarginPercent: body?.safetyMarginPercent != null ? Number(body.safetyMarginPercent) : null,
     });
   }
 
