@@ -11,4 +11,5 @@ apps/api/dist/
 docker/*.log
 uploads/*
 !uploads/.gitkeep
+backups/
 tmp.png
