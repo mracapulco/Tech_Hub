@@ -94,6 +94,18 @@ export class BackupService {
     return `${map.year}-${map.month}-${map.day}`;
   }
 
+  private isMissingRepositoryPlanningOverrideTableError(error: any) {
+    const code = String(error?.code || '').trim();
+    const message = String(error?.message || '').toLowerCase();
+    const targetNames = ['backuprepositoryoverride', 'backuprepositoryjoboverride'];
+    return (
+      code === 'P2021' ||
+      code === 'P2022' ||
+      targetNames.some((name) => message.includes(name)) ||
+      (message.includes('table') && targetNames.some((name) => message.includes(name.toLowerCase())))
+    );
+  }
+
   private async getVeeamMetricsSnapshot(input: {
     companyId: string;
     hostId: string;
@@ -358,6 +370,9 @@ export class BackupService {
       itemId: input.itemId || null,
       date: input.date || null,
     });
+    // #region debug-point D:veeam-repositories-entry
+    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'D',location:'backup.service.ts:getVeeamRepositories:entry',msg:'[DEBUG] Veeam repositories request received',data:{companyId:input.companyId,hostId:input.hostId,itemId:input.itemId||null,date:input.date||null},ts:Date.now()})}).catch(()=>{})})();
+    // #endregion
     const snapshot = await this.getVeeamMetricsSnapshot(input);
     this.logVeeamDebug('Resultado do item.get para repositórios', {
       companyId: input.companyId,
@@ -367,19 +382,45 @@ export class BackupService {
       itemFound: !!snapshot.ok,
       itemData: snapshot.ok ? snapshot.data.validatedItem : null,
     });
+    // #region debug-point C:veeam-repositories-snapshot
+    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'C',location:'backup.service.ts:getVeeamRepositories:snapshot',msg:'[DEBUG] Snapshot result for repositories',data:{ok:snapshot.ok,error:('error' in snapshot?snapshot.error:null),itemId:snapshot.ok?snapshot.data.validatedItem.itemId:null,historyClock:snapshot.ok?snapshot.data.latest.clock:null},ts:Date.now()})}).catch(()=>{})})();
+    // #endregion
     if (!snapshot.ok) return snapshot;
 
     const { validatedItem, latest, metricsJson } = snapshot.data;
     const repositoriesStates = Array.isArray(metricsJson?.repositories_states?.data) ? metricsJson.repositories_states.data : [];
     const jobsStates = Array.isArray(metricsJson?.jobs_states?.data) ? metricsJson.jobs_states.data : [];
-    const repositoryOverrides = await this.prisma.backupRepositoryOverride.findMany({
-      where: { companyId: input.companyId, zabbixHostId: input.hostId },
-      orderBy: { repositoryName: 'asc' },
-    });
-    const jobOverrides = await this.prisma.backupRepositoryJobOverride.findMany({
-      where: { companyId: input.companyId, zabbixHostId: input.hostId },
-      orderBy: [{ repositoryId: 'asc' }, { jobName: 'asc' }],
-    });
+    // #region debug-point B:veeam-repositories-payload-shape
+    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'B',location:'backup.service.ts:getVeeamRepositories:payload',msg:'[DEBUG] Repository payload shape inspected',data:{repositoriesStates:Array.isArray(repositoriesStates)?repositoriesStates.length:-1,jobsStates:Array.isArray(jobsStates)?jobsStates.length:-1,hasRepositoriesStates:Array.isArray(metricsJson?.repositories_states?.data),hasJobsStates:Array.isArray(metricsJson?.jobs_states?.data)},ts:Date.now()})}).catch(()=>{})})();
+    // #endregion
+    let repositoryOverrides: any[] = [];
+    let jobOverrides: any[] = [];
+    try {
+      repositoryOverrides = await this.prisma.backupRepositoryOverride.findMany({
+        where: { companyId: input.companyId, zabbixHostId: input.hostId },
+        orderBy: { repositoryName: 'asc' },
+      });
+      jobOverrides = await this.prisma.backupRepositoryJobOverride.findMany({
+        where: { companyId: input.companyId, zabbixHostId: input.hostId },
+        orderBy: [{ repositoryId: 'asc' }, { jobName: 'asc' }],
+      });
+      // #region debug-point A:veeam-repositories-overrides-ok
+      (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'A',location:'backup.service.ts:getVeeamRepositories:overrides-ok',msg:'[DEBUG] Override tables queried successfully',data:{repositoryOverrides:repositoryOverrides.length,jobOverrides:jobOverrides.length},ts:Date.now()})}).catch(()=>{})})();
+      // #endregion
+    } catch (error: any) {
+      // #region debug-point A:veeam-repositories-overrides-error
+      (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'A',location:'backup.service.ts:getVeeamRepositories:overrides-error',msg:'[DEBUG] Override table query failed',data:{name:error?.name||null,message:error?.message||String(error||''),code:error?.code||null,meta:error?.meta||null},ts:Date.now()})}).catch(()=>{})})();
+      // #endregion
+      if (this.isMissingRepositoryPlanningOverrideTableError(error)) {
+        // #region debug-point A:veeam-repositories-overrides-fallback
+        (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'A',location:'backup.service.ts:getVeeamRepositories:overrides-fallback',msg:'[DEBUG] Missing override tables detected, continuing without overrides',data:{code:error?.code||null},ts:Date.now()})}).catch(()=>{})})();
+        // #endregion
+        repositoryOverrides = [];
+        jobOverrides = [];
+      } else {
+      throw error;
+      }
+    }
 
     const planning = buildVeeamRepositoryPlanning({
       metricsJson,
@@ -426,6 +467,9 @@ export class BackupService {
       jobOverridesFound: jobOverrides.length,
       incompleteRepositories: planning.meta.repositoriesIncomplete,
     });
+    // #region debug-point E:veeam-repositories-success
+    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'E',location:'backup.service.ts:getVeeamRepositories:success',msg:'[DEBUG] Repository planning built successfully',data:{rows:planning.rows.length,repositoriesInferred:planning.meta.repositoriesInferred,incompleteRepositories:planning.meta.repositoriesIncomplete},ts:Date.now()})}).catch(()=>{})})();
+    // #endregion
 
     return {
       ok: true,

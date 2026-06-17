@@ -112,7 +112,14 @@ export class BackupController {
     if (!ctx.ok) return ctx;
     if (!ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) return { ok: false, error: 'Forbidden' };
     if (!companyId || (!hostId && !itemId)) return { ok: false, error: 'companyId e hostId/itemId são obrigatórios' };
-    return this.svc.getVeeamRepositories({ companyId, hostId, itemId, date });
+    try {
+      return await this.svc.getVeeamRepositories({ companyId, hostId, itemId, date });
+    } catch (error: any) {
+      // #region debug-point D:veeam-repositories-controller-error
+      (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'D',location:'backup.controller.ts:veeamRepositories:catch',msg:'[DEBUG] Controller observed repositories exception',data:{companyId,hostId,itemId:itemId||null,date:date||null,name:error?.name||null,message:error?.message||String(error||''),code:error?.code||null,meta:error?.meta||null},ts:Date.now()})}).catch(()=>{})})();
+      // #endregion
+      throw error;
+    }
   }
 
   @Get('veeam/repositories/:repositoryId/jobs')
