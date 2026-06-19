@@ -14,6 +14,8 @@ type RawSession = {
   creationTime?: string;
   endTime?: string | null;
   progressPercent?: number;
+  lastResult?: string | null;
+  lastRun?: string | null;
   result?: {
     result?: string | null;
     message?: string | null;
@@ -94,7 +96,7 @@ type BuildTimelineInput = {
   collectedAt?: Date | string | number | null;
 };
 
-const SOURCE_LABEL = 'Zabbix history item veeam.get.metrics';
+const SOURCE_LABEL = 'Zabbix history items veeam.get.metrics + veeam.agent.get.metrics';
 const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 const DEFAULT_BUCKET_MINUTES = 30;
 const RESULT_PRIORITY: Record<VeeamTimelineResult, number> = {
@@ -104,7 +106,6 @@ const RESULT_PRIORITY: Record<VeeamTimelineResult, number> = {
   Warning: 3,
   Failed: 4,
 };
-const ALLOWED_TYPES = new Set(['BackupJob', 'ReplicaJob']);
 const RUNNING_STATES = new Set(['working', 'running', 'postprocessing', 'starting', 'stopping']);
 
 function pad2(value: number): string {
@@ -199,14 +200,56 @@ function parseMetricsJson(metricsJson: RawMetricsJson): Record<string, any> {
 
 export function extractVeeamSessions(metricsJson: RawMetricsJson): RawSession[] {
   const parsed = parseMetricsJson(metricsJson);
-  const sessions = parsed?.sessions?.data;
-  return Array.isArray(sessions) ? sessions : [];
+  const sessions = Array.isArray(parsed?.sessions?.data) ? parsed.sessions.data : [];
+  const sessionsFromJobs = Array.isArray(parsed?.jobs_states_from_sessions?.data)
+    ? parsed.jobs_states_from_sessions.data
+        .map((job: any): RawSession | null => {
+          const start = String(job?.lastRun || '').trim();
+          const end = String(job?.endTime || '').trim();
+          if (!start || !end) return null;
+          return {
+            id: String(job?.sessionId || `${job?.id || job?.name || 'job'}:${start}`),
+            jobId: String(job?.id || job?.jobId || ''),
+            name: String(job?.name || 'Sem nome'),
+            sessionType: job?.rawType || job?.sessionType || job?.type || null,
+            state: String(job?.status || ''),
+            creationTime: start,
+            endTime: end,
+            progressPercent: Number.isFinite(Number(job?.progressPercent)) ? Number(job.progressPercent) : undefined,
+            lastResult: String(job?.lastResult || ''),
+            result: {
+              result: String(job?.lastResult || ''),
+              message: String(job?.description || job?.status || ''),
+            },
+          };
+        })
+        .filter((session: RawSession | null): session is RawSession => !!session)
+    : [];
+  const merged = [...sessions, ...sessionsFromJobs];
+  const unique = new Map<string, RawSession>();
+  for (const session of merged) {
+    const key = String(session.id || `${session.jobId || ''}:${session.name || ''}:${session.creationTime || ''}:${session.endTime || ''}`);
+    if (!unique.has(key)) unique.set(key, session);
+  }
+  return Array.from(unique.values());
 }
 
 export function normalizeVeeamType(sessionType?: string | number | null): VeeamTimelineType | null {
-  const normalized = String(sessionType ?? '').trim();
-  if (normalized === 'BackupJob') return 'Backup';
-  if (normalized === 'ReplicaJob') return 'Replica';
+  const normalized = String(sessionType ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (
+    normalized === 'backupjob' ||
+    normalized === 'backup' ||
+    normalized === 'agentbackupjob' ||
+    normalized === 'entirecomputer' ||
+    normalized === 'computerbackup'
+  ) return 'Backup';
+  if (
+    normalized === 'replicajob' ||
+    normalized === 'replica' ||
+    normalized === 'vspherereplica' ||
+    normalized === 'hypervreplica'
+  ) return 'Replica';
   return null;
 }
 
@@ -254,11 +297,9 @@ function toNormalizedSession(
   dayEnd: Date,
   collectedAt: Date,
 ): NormalizedSession | null {
-  const sessionType = String(raw?.sessionType ?? '').trim();
-  if (!ALLOWED_TYPES.has(sessionType)) return null;
   const type = normalizeVeeamType(raw?.sessionType);
   if (!type) return null;
-  const start = parseDate(raw?.creationTime);
+  const start = parseDate(raw?.creationTime || raw?.lastRun || null);
   if (!start) return null;
   const rawEnd = parseDate(raw?.endTime);
   const fallbackEnd = collectedAt > dayEnd ? dayEnd : collectedAt;
@@ -477,6 +518,23 @@ export function validateVeeamBackupTimelineMock(): { ok: boolean; details: strin
         },
       ],
     },
+    jobs_states_from_sessions: {
+      data: [
+        {
+          id: 'job-agent',
+          sessionId: 'agent-session',
+          name: 'VBR-ANTIDOPPE',
+          type: 'Backup',
+          rawType: 'AgentBackupJob',
+          status: 'inactive',
+          lastResult: 'Success',
+          lastRun: '2026-06-15T06:15:00-03:00',
+          endTime: '2026-06-15T06:45:00-03:00',
+          progressPercent: 100,
+          description: 'Agent backup concluido',
+        },
+      ],
+    },
   };
   const timeline = buildVeeamBackupTimeline({
     metricsJson,
@@ -487,9 +545,9 @@ export function validateVeeamBackupTimelineMock(): { ok: boolean; details: strin
   });
   const details: string[] = [];
   if (timeline.meta.bucketCount !== 48) details.push('bucketCount deve ser 48 para escala de 30 minutos');
-  if (timeline.debug.sessionsTotal !== 5) details.push('total de sessoes do JSON deveria ser 5');
-  if (timeline.debug.sessionsAfterTypeFilter !== 3) details.push('deve ignorar sessoes administrativas e tipos numericos');
-  if (timeline.meta.sessionsConsidered !== 3) details.push('deve considerar 3 sessoes no dia selecionado');
+  if (timeline.debug.sessionsTotal !== 6) details.push('total de sessoes do JSON deveria ser 6 contando sessao sintetizada de agent');
+  if (timeline.debug.sessionsAfterTypeFilter !== 4) details.push('deve ignorar sessoes administrativas e tipos numericos, mas incluir agent');
+  if (timeline.meta.sessionsConsidered !== 4) details.push('deve considerar 4 sessoes no dia selecionado');
   const backupRow = timeline.rows.find((row) => row.jobId === 'job-backup');
   if (!backupRow) {
     details.push('linha do job de backup nao encontrada');
@@ -501,5 +559,7 @@ export function validateVeeamBackupTimelineMock(): { ok: boolean; details: strin
   const runningRow = timeline.rows.find((row) => row.jobId === 'job-running');
   if (runningRow?.overallResult !== 'Running') details.push('sessao Postprocessing sem endTime deveria ficar Running');
   if (runningRow?.sessions[0]?.progressPercent !== 99) details.push('progressPercent deveria ser preservado');
+  const agentRow = timeline.rows.find((row) => row.jobId === 'job-agent');
+  if (!agentRow) details.push('linha sintetizada do job agent nao encontrada');
   return { ok: details.length === 0, details };
 }

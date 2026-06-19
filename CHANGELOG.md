@@ -4,7 +4,24 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
-## [0.4.2] — 2026-06-16
+## [0.4.4] — 2026-06-18
+
+### Adicionado
+- Gestão • Backup: leitura híbrida do Veeam ampliada para combinar também o item `veeam.agent.get.metrics`, incorporando rotinas físicas/agent ao planejamento, timeline e relatório.
+
+### Alterado
+- Gestão • Backup: tela `Coleta Veeam` consolidada como ponto de operação para configuração da coleta automática, disparo manual e histórico de snapshots persistidos.
+- Gestão • Backup: timeline e relatório passam a usar origem combinada dos itens `veeam.get.metrics` e `veeam.agent.get.metrics`, mantendo a visão de jobs virtuais e físicos no mesmo host.
+- Integração Zabbix • Backup: seleção do item monitorado passa a preferir o item mais recente e com payload mais rico quando existir mais de um item compatível no host.
+
+### Corrigido
+- Gestão • Backup: coleta manual global não derruba mais toda a execução quando uma empresa falha no Zabbix, retornando processamento resiliente por empresa.
+- Gestão • Backup: planejamento Hyper-V deixa de criar o bucket falso `Repositório não identificado` em cenários em que o vínculo do job precisa ser inferido a partir do nome da rotina.
+- Gestão • Backup: cliente `TECNOTEMPERA` volta a exibir rotinas físicas como `NAS-ANTIDOPPE` e `VBR-ANTIDOPPE`, mesclando jobs do item principal com o item de agente no mesmo host.
+- Gestão • Backup: timeline passa a sintetizar sessões a partir de `jobs_states_from_sessions` para jobs `agent`, refletindo corretamente execuções físicas também no relatório.
+
+### Operacional
+- Versões atualizadas: root e web `0.4.4`.
 
 ## [0.4.3] — 2026-06-17
 
@@ -12,10 +29,18 @@ Formato inspirado no Keep a Changelog e versionamento semântico quando aplicáv
 - Gestão • Backup: tela `Repositórios / Planejamento` passa a permitir escolha da data do snapshot para leitura do histórico do `veeam.get.metrics`.
 - Gestão • Backup: estimativas de tempo dos cenários passam a separar comportamento do incremental diário e do full semanal, refletindo melhor diferenças entre `Incremental`, `Synthetic Full` e `Active Full`.
 - Gestão • Backup: busca de snapshots para planejamento agora aceita fallback para o histórico mais recente anterior ou igual à data escolhida, com aviso visual na interface quando houver reaproveitamento.
+- Gestão • Backup: `Visão da rotina` agora aceita informar manualmente o tempo médio do Full semanal para rotinas `Synthetic Full` e `Active Full`, usando esse valor na calibração das estimativas futuras.
+- Gestão • Backup: `Cenários e recomendação` foi simplificado para comparar apenas os três modos principais, destacando visualmente qual é o modo atual e qual cenário foi recomendado.
+- Gestão • Backup: consultas Veeam agora passam a reutilizar snapshots persistidos no Tech Hub quando disponíveis, mantendo fallback para o histórico ao vivo do Zabbix.
 
 ### Corrigido
 - Web • Layout: menu do usuário no canto superior direito agora fecha ao clicar fora, ao navegar para outra tela e ao acionar itens do próprio menu.
 - Gestão • Backup: bloco de `Simulação detalhada da rotina` removido da tela de planejamento, evitando duplicidade com os cards de cenário.
+- Gestão • Backup: planejamento de repositórios passa a extrair rotinas com fallback entre `jobs_states.data`, `jobs_states_from_sessions.data` e `sessions.data`, corrigindo cenários Hyper-V sem alterar o comportamento já validado em VMware.
+
+### Adicionado
+- Gestão • Backup: base de coleta híbrida Veeam com configuração global, snapshots brutos, execução manual, agendamento automático e histórico consultável pela API.
+- Gestão • Backup: nova tela `Coleta Veeam` no web para ajustar parâmetros da coleta automática, disparar coletas manuais e consultar o histórico recente de snapshots persistidos.
 
 ### Operacional
 - Versões atualizadas: root e web `0.4.3`.

@@ -97,6 +97,66 @@ export class BackupController {
     return this.svc.listVeeamHosts(companyId);
   }
 
+  @Get('veeam/collection/config')
+  @Header('Cache-Control', 'no-store')
+  async veeamCollectionConfig(@Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    return this.svc.getVeeamCollectionConfig();
+  }
+
+  @Post('veeam/collection/config')
+  @Header('Cache-Control', 'no-store')
+  async saveVeeamCollectionConfig(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    return this.svc.updateVeeamCollectionConfig({
+      enabled: body?.enabled != null ? Boolean(body.enabled) : undefined,
+      intervalHours: body?.intervalHours != null ? Number(body.intervalHours) : undefined,
+      retentionDays: body?.retentionDays != null ? Number(body.retentionDays) : undefined,
+      allowManualRun: body?.allowManualRun != null ? Boolean(body.allowManualRun) : undefined,
+    });
+  }
+
+  @Get('veeam/collection/history')
+  @Header('Cache-Control', 'no-store')
+  async veeamCollectionHistory(
+    @Query('companyId') companyId: string | undefined,
+    @Query('hostId') hostId: string | undefined,
+    @Query('limit') limit: string | undefined,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (companyId && !ctx.isAdmin && !ctx.isTechnician && !ctx.allowedCompanyIds.includes(companyId)) {
+      return { ok: false, error: 'Forbidden' };
+    }
+    return this.svc.listVeeamCollectionHistory({
+      companyIds: ctx.isAdmin || ctx.isTechnician ? undefined : ctx.allowedCompanyIds,
+      companyId,
+      hostId,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Post('veeam/collection/run')
+  @Header('Cache-Control', 'no-store')
+  async runVeeamCollection(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const ctx = await this.getContext(authorization);
+    if (!ctx.ok) return ctx;
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    const companyId = body?.companyId ? String(body.companyId) : undefined;
+    const hostId = body?.hostId ? String(body.hostId) : undefined;
+    if (hostId && !companyId) return { ok: false, error: 'companyId é obrigatório quando hostId for informado.' };
+    return this.svc.runVeeamCollection({
+      triggerType: 'manual',
+      companyId,
+      hostId,
+    });
+  }
+
   @Get('veeam/repositories')
   @Header('Cache-Control', 'no-store')
   @Header('Pragma', 'no-cache')
@@ -232,6 +292,7 @@ export class BackupController {
       jobName,
       protectedSizeGB: body?.protectedSizeGB != null ? Number(body.protectedSizeGB) : null,
       fullBackupSizeGB: body?.fullBackupSizeGB != null ? Number(body.fullBackupSizeGB) : null,
+      fullWeeklyExecutionMinutes: body?.fullWeeklyExecutionMinutes != null ? Number(body.fullWeeklyExecutionMinutes) : null,
       dailyChangePercent: body?.dailyChangePercent != null ? Number(body.dailyChangePercent) : null,
       currentRetentionDays: body?.currentRetentionDays != null ? Number(body.currentRetentionDays) : null,
       retentionDays: body?.retentionDays != null ? Number(body.retentionDays) : null,

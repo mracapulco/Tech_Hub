@@ -9,6 +9,25 @@ type ZabbixConfig = { url: string; token: string; groupPrefix?: string };
 export class ZabbixService {
   constructor(private readonly prisma: PrismaService, private readonly settings: SettingsService) {}
 
+  private scoreItemRecency(item: any) {
+    return Number(item?.lastclock || 0);
+  }
+
+  private scoreItemPayloadLength(item: any) {
+    return String(item?.lastvalue || '').length;
+  }
+
+  private isBetterCandidateItem(next: any, current: any) {
+    if (!current) return true;
+    const nextClock = this.scoreItemRecency(next);
+    const currentClock = this.scoreItemRecency(current);
+    if (nextClock !== currentClock) return nextClock > currentClock;
+    const nextPayloadLength = this.scoreItemPayloadLength(next);
+    const currentPayloadLength = this.scoreItemPayloadLength(current);
+    if (nextPayloadLength !== currentPayloadLength) return nextPayloadLength > currentPayloadLength;
+    return Number(next?.itemid || 0) > Number(current?.itemid || 0);
+  }
+
   private getRpcErrorMessage(response: any, fallback: string): string {
     const message = String(response?.error?.data || response?.error?.message || '').trim();
     return message || fallback;
@@ -148,7 +167,7 @@ export class ZabbixService {
       jsonrpc: '2.0',
       method: 'item.get',
       params: {
-        output: ['itemid', 'hostid', 'key_', 'lastclock'],
+        output: ['itemid', 'hostid', 'key_', 'lastclock', 'lastvalue'],
         hostids: hostIds,
         filter: { key_: [itemKey] },
         monitored: true,
@@ -161,7 +180,7 @@ export class ZabbixService {
     for (const item of items) {
       const hostId = String(item?.hostid || '');
       const current = itemsByHostId.get(hostId);
-      if (!current || Number(item?.lastclock || 0) > Number(current?.lastclock || 0)) {
+      if (this.isBetterCandidateItem(item, current)) {
         itemsByHostId.set(hostId, item);
       }
     }
@@ -277,7 +296,7 @@ export class ZabbixService {
       return { ok: true as const, data: items };
     };
     const baseParams: any = {
-      output: ['itemid', 'hostid', 'name', 'key_', 'status', 'state', 'error', 'value_type'],
+      output: ['itemid', 'hostid', 'name', 'key_', 'status', 'state', 'error', 'value_type', 'lastclock', 'lastvalue'],
     };
     if (input.hostId) baseParams.hostids = [input.hostId];
     if (input.itemKey) baseParams.filter = { key_: [input.itemKey] };
@@ -299,7 +318,7 @@ export class ZabbixService {
       if (!byItemId.ok) return byItemId;
       items = byItemId.data;
     }
-    const item = items[0] || null;
+    const item = items.reduce((best: any, current: any) => (this.isBetterCandidateItem(current, best) ? current : best), null);
     if (!item?.itemid) return { ok: false, error: 'Item veeam.get.metrics não encontrado para o host selecionado.' };
     return { ok: true, data: buildItem(item) };
   }

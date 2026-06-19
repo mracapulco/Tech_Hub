@@ -30,6 +30,7 @@ type RepositoryManual = RepositoryNumbers & {
 type JobPlanningManual = {
   protectedSizeGB: number | null;
   fullBackupSizeGB: number | null;
+  fullWeeklyExecutionMinutes: number | null;
   dailyChangePercent: number | null;
   currentRetentionDays: number | null;
   retentionDays: number | null;
@@ -145,6 +146,7 @@ type NeedForm = {
   currentBackupMode: ScenarioMode;
   dailyFrequency: string;
   averageExecutionMinutes: string;
+  fullWeeklyExecutionMinutes: string;
   totalBackupSizeGB: string;
   fullBackupSizeGB: string;
   dailyChangePercent: string;
@@ -292,12 +294,17 @@ function buildNeedForm(job: RepositoryJob | null): NeedForm {
     currentBackupMode: (base?.backupMode || fallback?.backupMode || "Incremental") as ScenarioMode,
     dailyFrequency: toFormValue(base?.dailyFrequency ?? job?.planning.frequency.effectiveDailyFrequency ?? fallback?.dailyFrequency ?? 1),
     averageExecutionMinutes: toFormValue(job?.runtime.averageExecutionMinutes),
+    fullWeeklyExecutionMinutes: toFormValue(base?.fullWeeklyExecutionMinutes),
     totalBackupSizeGB: toFormValue(base?.protectedSizeGB ?? fallback?.protectedSizeGB),
     fullBackupSizeGB: toFormValue(base?.fullBackupSizeGB ?? fallback?.fullBackupSizeGB ?? fallback?.protectedSizeGB),
     dailyChangePercent: toFormValue(base?.dailyChangePercent ?? fallback?.dailyChangePercent ?? 0),
     safetyMarginPercent: toFormValue(base?.safetyMarginPercent ?? fallback?.safetyMarginPercent ?? 20),
     preference: "balance",
   };
+}
+
+function requiresWeeklyFullTime(mode: ScenarioMode) {
+  return mode === "Synthetic Full" || mode === "Active Full";
 }
 
 function getScenarioFullCopies(mode: ScenarioMode, retentionDays: number) {
@@ -344,6 +351,7 @@ function simulatePlanningScenario(input: {
   baseDailyFrequency: number | null;
   dailyFrequency: number | null;
   averageExecutionMinutes: number | null;
+  fullWeeklyExecutionMinutes: number | null;
   totalBackupSizeGB: number | null;
   fullBackupSizeGB: number | null;
   dailyChangePercent: number | null;
@@ -351,6 +359,7 @@ function simulatePlanningScenario(input: {
 }): ScenarioResult {
   const effectiveCurrentRetentionDays = input.currentRetentionDays ?? input.desiredRetentionDays;
   const effectiveBaseDailyFrequency = input.baseDailyFrequency ?? input.dailyFrequency;
+  const needsCurrentWeeklyFullTime = requiresWeeklyFullTime(input.currentBackupMode);
   const complete =
     input.capacityGB != null &&
     input.capacityGB > 0 &&
@@ -366,6 +375,8 @@ function simulatePlanningScenario(input: {
     input.totalBackupSizeGB > 0 &&
     input.averageExecutionMinutes != null &&
     input.averageExecutionMinutes > 0 &&
+    (!needsCurrentWeeklyFullTime ||
+      (input.fullWeeklyExecutionMinutes != null && input.fullWeeklyExecutionMinutes > 0)) &&
     input.dailyChangePercent != null &&
     input.dailyChangePercent >= 0 &&
     input.safetyMarginPercent != null &&
@@ -421,38 +432,35 @@ function simulatePlanningScenario(input: {
     input.dailyFrequency != null && input.dailyFrequency > 0
       ? getScenarioTotalExecutionsPerWeek(input.mode, input.dailyFrequency)
       : null;
-  const baselineFixedMinutesPerExecution =
+  const currentObservedWeeklyMinutes =
+    currentWeeklyEquivalentLoad != null &&
+    currentIncrementalExecutionsPerWeek != null &&
+    currentIncrementalExecutionsPerWeek > 0 &&
     input.averageExecutionMinutes != null &&
     input.averageExecutionMinutes > 0
-      ? input.averageExecutionMinutes * 0.18
+      ? input.averageExecutionMinutes * currentIncrementalExecutionsPerWeek +
+        (currentFullExecutionsPerWeek > 0 ? input.fullWeeklyExecutionMinutes ?? 0 : 0)
       : null;
   const baselineVariableThroughputGBPerMinute =
     currentWeeklyEquivalentLoad != null &&
-    currentExecutionsPerWeek != null &&
-    currentExecutionsPerWeek > 0 &&
-    input.averageExecutionMinutes != null &&
-    baselineFixedMinutesPerExecution != null
-      ? currentWeeklyEquivalentLoad /
-        Math.max(input.averageExecutionMinutes * currentExecutionsPerWeek - baselineFixedMinutesPerExecution * currentExecutionsPerWeek, 1)
+    currentObservedWeeklyMinutes != null &&
+    currentObservedWeeklyMinutes > 0
+      ? currentWeeklyEquivalentLoad / currentObservedWeeklyMinutes
       : null;
   const estimatedIncrementalExecutionMinutes =
     complete &&
     incrementalDailyGB != null &&
     baselineVariableThroughputGBPerMinute != null &&
-    baselineVariableThroughputGBPerMinute > 0 &&
-    baselineFixedMinutesPerExecution != null
-      ? baselineFixedMinutesPerExecution +
-        (incrementalDailyGB * getScenarioIncrementalRuntimeFactor(input.mode)) / baselineVariableThroughputGBPerMinute
+    baselineVariableThroughputGBPerMinute > 0
+      ? (incrementalDailyGB * getScenarioIncrementalRuntimeFactor(input.mode)) / baselineVariableThroughputGBPerMinute
       : null;
   const estimatedFullExecutionMinutes =
     complete &&
     fullBackupSizeGB != null &&
     scenarioFullExecutionsPerWeek > 0 &&
     baselineVariableThroughputGBPerMinute != null &&
-    baselineVariableThroughputGBPerMinute > 0 &&
-    baselineFixedMinutesPerExecution != null
-      ? baselineFixedMinutesPerExecution +
-        (fullBackupSizeGB * getScenarioFullRuntimeFactor(input.mode)) / baselineVariableThroughputGBPerMinute
+    baselineVariableThroughputGBPerMinute > 0
+      ? (fullBackupSizeGB * getScenarioFullRuntimeFactor(input.mode)) / baselineVariableThroughputGBPerMinute
       : null;
   const estimatedWeeklyIncrementalMinutes =
     estimatedIncrementalExecutionMinutes != null && scenarioIncrementalExecutionsPerWeek != null
@@ -738,13 +746,13 @@ export default function BackupReposPage() {
       baseDailyFrequency: selectedJob.planning.frequency.effectiveDailyFrequency,
       dailyFrequency: toNumberOrNull(needForm.dailyFrequency),
       averageExecutionMinutes: toNumberOrNull(needForm.averageExecutionMinutes),
+      fullWeeklyExecutionMinutes: toNumberOrNull(needForm.fullWeeklyExecutionMinutes),
       totalBackupSizeGB: toNumberOrNull(needForm.totalBackupSizeGB),
       fullBackupSizeGB: toNumberOrNull(needForm.fullBackupSizeGB),
       dailyChangePercent: toNumberOrNull(needForm.dailyChangePercent),
       safetyMarginPercent: toNumberOrNull(needForm.safetyMarginPercent),
     };
     return [
-      simulatePlanningScenario({ id: "current", label: "Atual projetado", mode: needForm.currentBackupMode, ...base }),
       simulatePlanningScenario({ id: "incremental", label: "Incremental puro", mode: "Incremental", ...base }),
       simulatePlanningScenario({ id: "synthetic", label: "Synthetic Full semanal", mode: "Synthetic Full", ...base }),
       simulatePlanningScenario({ id: "active", label: "Active Full semanal", mode: "Active Full", ...base }),
@@ -891,6 +899,10 @@ export default function BackupReposPage() {
       setError(null);
       setNotice(null);
       try {
+        if (requiresWeeklyFullTime(needForm.currentBackupMode) && toNumberOrNull(needForm.fullWeeklyExecutionMinutes) == null) {
+          setError("Informe o tempo médio do Full semanal para rotinas com Synthetic Full ou Active Full.");
+          return;
+        }
         const res = await apiPost<{ ok: boolean; error?: string }>(
           "/backup/veeam/repositories/job-override",
           token,
@@ -902,6 +914,7 @@ export default function BackupReposPage() {
             jobName: selectedJob.name,
             protectedSizeGB: toNumberOrNull(needForm.totalBackupSizeGB),
             fullBackupSizeGB: toNumberOrNull(needForm.fullBackupSizeGB),
+            fullWeeklyExecutionMinutes: toNumberOrNull(needForm.fullWeeklyExecutionMinutes),
             dailyChangePercent: toNumberOrNull(needForm.dailyChangePercent),
             currentRetentionDays: toNumberOrNull(needForm.currentRetentionDays),
             retentionDays: toNumberOrNull(needForm.desiredRetentionDays),
@@ -1288,6 +1301,19 @@ export default function BackupReposPage() {
                       <input value={needForm.averageExecutionMinutes} onChange={(e) => setNeedForm((current) => ({ ...current, averageExecutionMinutes: e.target.value }))} className="w-full rounded border border-border px-3 py-2" />
                       <p className="mt-1 text-xs text-muted">Estimativa baseada no JSON: {formatMinutes(selectedJob.runtime.averageExecutionMinutes)} em {formatCount(selectedJob.runtime.samples)} execução(ões).</p>
                     </div>
+                    {requiresWeeklyFullTime(needForm.currentBackupMode) ? (
+                      <div>
+                        <label className="mb-1 block text-sm font-medium">Tempo médio do Full semanal (min)</label>
+                        <input
+                          value={needForm.fullWeeklyExecutionMinutes}
+                          onChange={(e) => setNeedForm((current) => ({ ...current, fullWeeklyExecutionMinutes: e.target.value }))}
+                          className="w-full rounded border border-border px-3 py-2"
+                        />
+                        <p className="mt-1 text-xs text-muted">
+                          Campo obrigatório para calibrar as estimativas quando o modo atual usa Full semanal.
+                        </p>
+                      </div>
+                    ) : null}
                     <div>
                       <label className="mb-1 block text-sm font-medium">Objetivo da análise</label>
                       <select value={needForm.preference} onChange={(e) => setNeedForm((current) => ({ ...current, preference: e.target.value as GoalPreference }))} className="w-full rounded border border-border px-3 py-2">
@@ -1358,6 +1384,9 @@ export default function BackupReposPage() {
                       <div className="mt-1 text-sm text-muted">Frequência observada: {formatCount(selectedJob.frequency.autoDailyFrequency)} execução(ões)/dia</div>
                       <div className="mt-1 text-sm text-muted">Tempo médio observado: {formatMinutes(selectedJob.runtime.averageExecutionMinutes)}</div>
                       <div className="mt-1 text-sm text-muted">Tipo atual considerado: {needForm.currentBackupMode}</div>
+                      {requiresWeeklyFullTime(needForm.currentBackupMode) ? (
+                        <div className="mt-1 text-sm text-muted">Tempo médio do Full semanal: {formatMinutes(toNumberOrNull(needForm.fullWeeklyExecutionMinutes))}</div>
+                      ) : null}
                     </div>
                   </div>
                 </section>
@@ -1387,9 +1416,21 @@ export default function BackupReposPage() {
                           <div className="font-medium">{scenario.label}</div>
                           <div className="mt-1 text-xs text-muted">Modo: {scenario.mode}</div>
                         </div>
-                        <span className={`inline-flex rounded border px-2 py-1 text-xs font-medium ${executiveBadgeClass(scenario.status)}`}>
-                          {scenario.status}
-                        </span>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {scenario.mode === needForm.currentBackupMode ? (
+                            <span className="inline-flex rounded border border-gray-200 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-800">
+                              Atual
+                            </span>
+                          ) : null}
+                          {recommendedScenario?.id === scenario.id ? (
+                            <span className="inline-flex rounded border border-blue-200 bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+                              Recomendado
+                            </span>
+                          ) : null}
+                          <span className={`inline-flex rounded border px-2 py-1 text-xs font-medium ${executiveBadgeClass(scenario.status)}`}>
+                            {scenario.status}
+                          </span>
+                        </div>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                         <div className="rounded border border-border bg-card p-3">
@@ -1436,13 +1477,6 @@ export default function BackupReposPage() {
                         </div>
                       </div>
                       <p className="mt-3 text-sm text-muted">{scenario.recommendation}</p>
-                      {recommendedScenario?.id === scenario.id ? (
-                        <div className="mt-3">
-                          <span className="inline-flex rounded border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
-                            Recomendado
-                          </span>
-                        </div>
-                      ) : null}
                     </div>
                   ))}
                 </div>

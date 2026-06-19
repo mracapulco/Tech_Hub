@@ -56,6 +56,7 @@ model Company {
   backupJobs BackupJob[]
   backupRepositoryOverrides BackupRepositoryOverride[]
   backupRepositoryJobOverrides BackupRepositoryJobOverride[]
+  backupVeeamSnapshots BackupVeeamSnapshotRaw[]
   backupSummaries BackupSummaryMonthly[]
   adFsProjects AdFsProject[]
 }
@@ -459,6 +460,7 @@ model BackupRepositoryJobOverride {
   jobName             String
   protectedSizeGB     Float?
   fullBackupSizeGB    Float?
+  fullWeeklyExecutionMinutes Float?
   dailyChangePercent  Float?
   currentRetentionDays Int?
   retentionDays       Int?
@@ -475,6 +477,41 @@ model BackupRepositoryJobOverride {
   @@index([companyId])
   @@index([zabbixHostId])
   @@index([repositoryId])
+}
+
+model BackupCollectionConfig {
+  id              String   @id @default(uuid())
+  scope           String   @unique @default("global")
+  enabled         Boolean  @default(true)
+  intervalHours   Int      @default(12)
+  retentionDays   Int      @default(30)
+  allowManualRun  Boolean  @default(true)
+  lastRunAt       DateTime?
+  lastSuccessAt   DateTime?
+  lastTriggerType String?
+  lastError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BackupVeeamSnapshotRaw {
+  id             String   @id @default(uuid())
+  company        Company  @relation(fields: [companyId], references: [id])
+  companyId      String
+  zabbixHostId   String
+  zabbixHostName String?
+  itemId         String
+  itemName       String?
+  sourceClock    Int
+  triggerType    String
+  payloadHash    String
+  payloadJson    Json
+  createdAt      DateTime @default(now())
+
+  @@unique([companyId, zabbixHostId, itemId, sourceClock])
+  @@index([companyId, createdAt])
+  @@index([zabbixHostId, createdAt])
+  @@index([itemId, sourceClock])
 }
 
 enum AdFsNodeType {

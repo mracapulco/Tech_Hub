@@ -25,6 +25,12 @@ export default function BackupOverviewPage() {
               Cruce dados automáticos do Zabbix com overrides manuais e simule retenção por repositório.
             </p>
           </Link>
+          <Link href="/gestao/backup/coleta" className="rounded border border-border bg-white p-4 shadow-sm transition hover:border-blue-300 hover:bg-blue-50">
+            <div className="text-base font-semibold text-primary">Coleta Veeam</div>
+            <p className="mt-2 text-sm text-muted">
+              Ajuste os parâmetros da coleta automática, rode coletas manuais e acompanhe o histórico persistido.
+            </p>
+          </Link>
           <Link href="/gestao/backup/proxies" className="rounded border border-border bg-white p-4 shadow-sm transition hover:border-gray-300 hover:bg-gray-50">
             <div className="text-base font-semibold text-primary">Gerir Proxies</div>
             <p className="mt-2 text-sm text-muted">

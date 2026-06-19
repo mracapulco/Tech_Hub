@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma.service';
 import { ZabbixService } from '../integrations/zabbix/zabbix.service';
 import {
@@ -46,8 +47,25 @@ type VeeamMetricsSnapshotResult =
     };
 
 @Injectable()
-export class BackupService {
+export class BackupService implements OnModuleInit, OnModuleDestroy {
+  private collectionTimer: NodeJS.Timeout | null = null;
+  private collectionRunning = false;
+
   constructor(private readonly prisma: PrismaService, private readonly zabbixService: ZabbixService) {}
+
+  onModuleInit() {
+    this.collectionTimer = setInterval(() => {
+      this.runScheduledVeeamCollection().catch(() => undefined);
+    }, 5 * 60 * 1000);
+    setTimeout(() => {
+      this.runScheduledVeeamCollection().catch(() => undefined);
+    }, 15 * 1000);
+  }
+
+  onModuleDestroy() {
+    if (this.collectionTimer) clearInterval(this.collectionTimer);
+    this.collectionTimer = null;
+  }
 
   private logVeeamDebug(_message: string, _data: Record<string, any>) {}
 
@@ -94,6 +112,415 @@ export class BackupService {
     return `${map.year}-${map.month}-${map.day}`;
   }
 
+  private buildPayloadHash(payload: Record<string, any>) {
+    return createHash('sha256').update(JSON.stringify(payload || {})).digest('hex');
+  }
+
+  private buildDefaultBackupCollectionConfig() {
+    const now = new Date();
+    return {
+      id: 'in-memory-global',
+      scope: 'global',
+      enabled: true,
+      intervalHours: 12,
+      retentionDays: 30,
+      allowManualRun: true,
+      lastRunAt: null,
+      lastSuccessAt: null,
+      lastTriggerType: null,
+      lastError: 'Schema de coleta ainda nao aplicado no banco local.',
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private isUsingInMemoryCollectionConfig(config: { id?: string | null }) {
+    return config?.id === 'in-memory-global';
+  }
+
+  private isMissingVeeamCollectionStorageError(error: any) {
+    const text = String(error?.message || '');
+    return (
+      error?.code === 'P2021' &&
+      (text.includes('BackupVeeamSnapshotRaw') || text.includes('BackupCollectionConfig'))
+    );
+  }
+
+  private async getOrCreateBackupCollectionConfig() {
+    try {
+      const existing = await this.prisma.backupCollectionConfig.findUnique({ where: { scope: 'global' } });
+      if (existing) return existing;
+      return this.prisma.backupCollectionConfig.create({
+        data: {
+          scope: 'global',
+          enabled: true,
+          intervalHours: 12,
+          retentionDays: 30,
+          allowManualRun: true,
+        },
+      });
+    } catch (error: any) {
+      if (this.isMissingVeeamCollectionStorageError(error)) {
+        return this.buildDefaultBackupCollectionConfig();
+      }
+      throw error;
+    }
+  }
+
+  private async getStoredVeeamMetricsSnapshot(input: {
+    companyId: string;
+    hostId: string;
+    itemId: string;
+    date?: string;
+    validatedItem: VeeamValidatedItem;
+  }): Promise<VeeamMetricsSnapshotResult | null> {
+    const requestedDate = input.date && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : null;
+    let storedRows: Array<{
+      itemId: string;
+      sourceClock: number;
+      payloadJson: unknown;
+      createdAt: Date;
+    }> = [];
+    try {
+      storedRows = await this.prisma.backupVeeamSnapshotRaw.findMany({
+        where: {
+          companyId: input.companyId,
+          zabbixHostId: input.hostId,
+          itemId: input.itemId,
+        },
+        orderBy: [{ sourceClock: 'desc' }, { createdAt: 'desc' }],
+        take: requestedDate ? 180 : 1,
+      });
+    } catch (error: any) {
+      if (this.isMissingVeeamCollectionStorageError(error)) {
+        return null;
+      }
+      throw error;
+    }
+    const selectedRow = requestedDate
+      ? storedRows.find((row) => this.getSaoPauloDateFromUnixSeconds(Number(row.sourceClock || 0)) <= requestedDate)
+      : storedRows[0];
+    if (!selectedRow) return null;
+    return {
+      ok: true,
+      data: {
+        validatedItem: input.validatedItem,
+        latest: {
+          itemId: selectedRow.itemId,
+          clock: selectedRow.sourceClock,
+          ns: 0,
+          value: JSON.stringify(selectedRow.payloadJson || {}),
+        },
+        metricsJson: (selectedRow.payloadJson || {}) as Record<string, any>,
+      },
+    };
+  }
+
+  async getVeeamCollectionConfig() {
+    const config = await this.getOrCreateBackupCollectionConfig();
+    return { ok: true, data: config };
+  }
+
+  async updateVeeamCollectionConfig(input: {
+    enabled?: boolean;
+    intervalHours?: number;
+    retentionDays?: number;
+    allowManualRun?: boolean;
+  }) {
+    const next: any = {};
+    if (typeof input.enabled === 'boolean') next.enabled = input.enabled;
+    if (typeof input.allowManualRun === 'boolean') next.allowManualRun = input.allowManualRun;
+    if (input.intervalHours != null) {
+      const intervalHours = Number(input.intervalHours);
+      if (!Number.isFinite(intervalHours) || intervalHours < 1 || intervalHours > 720) {
+        return { ok: false, error: 'intervalHours deve estar entre 1 e 720.' };
+      }
+      next.intervalHours = Math.round(intervalHours);
+    }
+    if (input.retentionDays != null) {
+      const retentionDays = Number(input.retentionDays);
+      if (!Number.isFinite(retentionDays) || retentionDays < 1 || retentionDays > 3650) {
+        return { ok: false, error: 'retentionDays deve estar entre 1 e 3650.' };
+      }
+      next.retentionDays = Math.round(retentionDays);
+    }
+    const current = await this.getOrCreateBackupCollectionConfig();
+    if (this.isUsingInMemoryCollectionConfig(current)) {
+      return { ok: false, error: 'Schema da coleta automatica ainda nao foi aplicado no banco.' };
+    }
+    const saved = await this.prisma.backupCollectionConfig.update({
+      where: { scope: current.scope },
+      data: next,
+    });
+    return { ok: true, data: saved };
+  }
+
+  async listVeeamCollectionHistory(input: {
+    companyIds?: string[];
+    companyId?: string;
+    hostId?: string;
+    limit?: number;
+  }) {
+    const limit = Math.min(Math.max(Number(input.limit || 50), 1), 200);
+    const where: any = {};
+    if (input.companyId) {
+      where.companyId = input.companyId;
+    } else if (Array.isArray(input.companyIds) && input.companyIds.length > 0) {
+      where.companyId = { in: input.companyIds };
+    }
+    if (input.hostId) where.zabbixHostId = input.hostId;
+    let rows: any[] = [];
+    try {
+      rows = await this.prisma.backupVeeamSnapshotRaw.findMany({
+        where,
+        orderBy: [{ sourceClock: 'desc' }, { createdAt: 'desc' }],
+        take: limit,
+        select: {
+          id: true,
+          companyId: true,
+          zabbixHostId: true,
+          zabbixHostName: true,
+          itemId: true,
+          itemName: true,
+          sourceClock: true,
+          triggerType: true,
+          payloadHash: true,
+          createdAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              fantasyName: true,
+            },
+          },
+        },
+      });
+    } catch (error: any) {
+      if (this.isMissingVeeamCollectionStorageError(error)) {
+        return { ok: true, data: [] };
+      }
+      throw error;
+    }
+    return { ok: true, data: rows };
+  }
+
+  private async purgeOldVeeamSnapshots(retentionDays: number) {
+    const safeRetentionDays = Math.max(1, Math.min(Math.round(retentionDays || 30), 3650));
+    const cutoff = new Date(Date.now() - safeRetentionDays * 24 * 60 * 60 * 1000);
+    let deleted;
+    try {
+      deleted = await this.prisma.backupVeeamSnapshotRaw.deleteMany({
+        where: {
+          createdAt: { lt: cutoff },
+        },
+      });
+    } catch (error: any) {
+      if (this.isMissingVeeamCollectionStorageError(error)) {
+        return 0;
+      }
+      throw error;
+    }
+    return deleted.count;
+  }
+
+  async runVeeamCollection(input: {
+    triggerType: 'manual' | 'scheduled';
+    companyId?: string;
+    hostId?: string;
+  }) {
+    const config = await this.getOrCreateBackupCollectionConfig();
+    if (input.triggerType === 'manual' && !config.allowManualRun) {
+      return { ok: false, error: 'Coleta manual desabilitada na configuração atual.' };
+    }
+    if (input.triggerType === 'scheduled' && !config.enabled) {
+      return { ok: true, data: { skipped: true, reason: 'disabled' } };
+    }
+    if (this.isUsingInMemoryCollectionConfig(config)) {
+      return {
+        ok: input.triggerType === 'scheduled',
+        ...(input.triggerType === 'scheduled'
+          ? { data: { skipped: true, reason: 'storage-unavailable' } }
+          : { error: 'Schema da coleta automatica ainda nao foi aplicado no banco.' }),
+      };
+    }
+    if (this.collectionRunning) {
+      return { ok: false, error: 'Já existe uma coleta Veeam em execução.' };
+    }
+
+    this.collectionRunning = true;
+    const startedAt = new Date();
+    await this.prisma.backupCollectionConfig.update({
+      where: { scope: config.scope },
+      data: {
+        lastRunAt: startedAt,
+        lastTriggerType: input.triggerType,
+        lastError: null,
+      },
+    });
+
+    let hostsConsidered = 0;
+    let snapshotsCreated = 0;
+    let snapshotsUpdated = 0;
+    let snapshotsUnchanged = 0;
+    const errors: Array<{ companyId: string; hostId?: string; message: string }> = [];
+    let debugCurrentHostId: string | null = null;
+
+    try {
+      const companies = input.companyId
+        ? await this.prisma.company.findMany({
+            where: { id: input.companyId, status: 'ACTIVE' },
+            select: { id: true, name: true, fantasyName: true },
+          })
+        : await this.prisma.company.findMany({
+            where: { status: 'ACTIVE' },
+            select: { id: true, name: true, fantasyName: true },
+          });
+
+      for (const company of companies) {
+        debugCurrentHostId = null;
+        try {
+          const zabbixConfig = await this.zabbixService.getConfig(company.id);
+          if (!zabbixConfig) {
+            continue;
+          }
+          const hostsResult = await this.zabbixService.listHostsWithItem(company.id, 'veeam.get.metrics');
+          if (!hostsResult.ok) {
+            errors.push({ companyId: company.id, message: hostsResult.error || 'Falha ao listar hosts Veeam.' });
+            continue;
+          }
+          const hosts = (Array.isArray(hostsResult.data) ? hostsResult.data : []).filter((host: any) =>
+            input.hostId ? host.hostId === input.hostId : true,
+          );
+          for (const host of hosts) {
+            debugCurrentHostId = host.hostId;
+            hostsConsidered += 1;
+            const historyResult = await this.zabbixService.getItemTextHistory(company.id, host.itemId);
+            if (!historyResult.ok) {
+              errors.push({
+                companyId: company.id,
+                hostId: host.hostId,
+                message: historyResult.error || 'Falha ao consultar histórico do item.',
+              });
+              continue;
+            }
+            const latest = Array.isArray(historyResult.data) ? historyResult.data[0] : null;
+            if (!latest?.value || !latest?.clock) {
+              errors.push({
+                companyId: company.id,
+                hostId: host.hostId,
+                message: 'Item veeam.get.metrics sem histórico disponível.',
+              });
+              continue;
+            }
+            let payloadJson: Record<string, any>;
+            try {
+              payloadJson = JSON.parse(String(latest.value || '{}'));
+            } catch {
+              errors.push({
+                companyId: company.id,
+                hostId: host.hostId,
+                message: 'JSON inválido no histórico do item veeam.get.metrics.',
+              });
+              continue;
+            }
+            const payloadHash = this.buildPayloadHash(payloadJson);
+            const existing = await this.prisma.backupVeeamSnapshotRaw.findUnique({
+              where: {
+                companyId_zabbixHostId_itemId_sourceClock: {
+                  companyId: company.id,
+                  zabbixHostId: host.hostId,
+                  itemId: host.itemId,
+                  sourceClock: Number(latest.clock),
+                },
+              },
+            });
+            if (!existing) {
+              await this.prisma.backupVeeamSnapshotRaw.create({
+                data: {
+                  companyId: company.id,
+                  zabbixHostId: host.hostId,
+                  zabbixHostName: host.name || host.host || null,
+                  itemId: host.itemId,
+                  itemName: 'veeam.get.metrics',
+                  sourceClock: Number(latest.clock),
+                  triggerType: input.triggerType,
+                  payloadHash,
+                  payloadJson,
+                },
+              });
+              snapshotsCreated += 1;
+            } else if (existing.payloadHash !== payloadHash) {
+              await this.prisma.backupVeeamSnapshotRaw.update({
+                where: { id: existing.id },
+                data: {
+                  zabbixHostName: host.name || host.host || existing.zabbixHostName,
+                  triggerType: input.triggerType,
+                  payloadHash,
+                  payloadJson,
+                },
+              });
+              snapshotsUpdated += 1;
+            } else {
+              snapshotsUnchanged += 1;
+            }
+          }
+        } catch (companyError: any) {
+          errors.push({
+            companyId: company.id,
+            hostId: debugCurrentHostId || undefined,
+            message: companyError?.message || 'Falha ao processar a coleta desta empresa.',
+          });
+        }
+      }
+
+      const deletedSnapshots = await this.purgeOldVeeamSnapshots(config.retentionDays);
+      const finishedAt = new Date();
+      await this.prisma.backupCollectionConfig.update({
+        where: { scope: config.scope },
+        data: {
+          lastSuccessAt: finishedAt,
+          lastError: errors.length > 0 ? `${errors.length} ocorrência(s) com falha parcial.` : null,
+        },
+      });
+      return {
+        ok: true,
+        data: {
+          triggerType: input.triggerType,
+          startedAt,
+          finishedAt,
+          hostsConsidered,
+          snapshotsCreated,
+          snapshotsUpdated,
+          snapshotsUnchanged,
+          deletedSnapshots,
+          errors,
+        },
+      };
+    } catch (error: any) {
+      await this.prisma.backupCollectionConfig.update({
+        where: { scope: config.scope },
+        data: {
+          lastError: error?.message || String(error || 'Falha na coleta Veeam.'),
+        },
+      });
+      return {
+        ok: false,
+        error: error?.message || 'Falha na coleta Veeam.',
+      };
+    } finally {
+      this.collectionRunning = false;
+    }
+  }
+
+  private async runScheduledVeeamCollection() {
+    const config = await this.getOrCreateBackupCollectionConfig();
+    if (!config.enabled || this.collectionRunning) return;
+    const reference = config.lastSuccessAt || config.lastRunAt || config.updatedAt || config.createdAt;
+    const intervalMs = Math.max(1, config.intervalHours) * 60 * 60 * 1000;
+    if (reference && Date.now() - new Date(reference).getTime() < intervalMs) return;
+    await this.runVeeamCollection({ triggerType: 'scheduled' });
+  }
+
   private isMissingRepositoryPlanningOverrideTableError(error: any) {
     const code = String(error?.code || '').trim();
     const message = String(error?.message || '').toLowerCase();
@@ -111,26 +538,39 @@ export class BackupService {
     hostId: string;
     itemId?: string;
     date?: string;
+    itemKey?: string;
   }): Promise<VeeamMetricsSnapshotResult> {
+    const itemKey = String(input.itemKey || 'veeam.get.metrics');
     const validatedItem = await this.zabbixService.getValidatedItem(input.companyId, {
       hostId: input.hostId,
       itemId: input.itemId,
-      itemKey: 'veeam.get.metrics',
+      itemKey,
     });
     if (!validatedItem.ok || !validatedItem.data) {
-      return { ok: false, error: validatedItem.error || 'Falha ao validar item veeam.get.metrics no Zabbix.' };
+      return { ok: false, error: validatedItem.error || `Falha ao validar item ${itemKey} no Zabbix.` };
+    }
+
+    const storedSnapshot = await this.getStoredVeeamMetricsSnapshot({
+      companyId: input.companyId,
+      hostId: input.hostId,
+      itemId: validatedItem.data.itemId,
+      date: input.date,
+      validatedItem: validatedItem.data,
+    });
+    if (storedSnapshot?.ok) {
+      return storedSnapshot;
     }
 
     const history = await this.zabbixService.getItemTextHistory(input.companyId, validatedItem.data.itemId);
     if (!history.ok) {
-      return { ok: false, error: history.error || 'Falha ao consultar histórico do item veeam.get.metrics.' };
+      return { ok: false, error: history.error || `Falha ao consultar histórico do item ${itemKey}.` };
     }
     const historyRows = Array.isArray(history.data) ? history.data : [];
     if (historyRows.length === 0) {
       return {
         ok: false,
         error:
-          'Item veeam.get.metrics encontrado, mas sem histórico disponível. Execute a coleta no Zabbix ou verifique a retenção de histórico do item.',
+          `Item ${itemKey} encontrado, mas sem histórico disponível. Execute a coleta no Zabbix ou verifique a retenção de histórico do item.`,
       };
     }
 
@@ -142,14 +582,14 @@ export class BackupService {
     if (!selectedHistoryRow) {
       return {
         ok: false,
-        error: `Nao foi encontrado historico do item veeam.get.metrics para a data ${requestedDate} nem para datas anteriores.`,
+        error: `Nao foi encontrado historico do item ${itemKey} para a data ${requestedDate} nem para datas anteriores.`,
       };
     }
     let metricsJson: Record<string, any>;
     try {
       metricsJson = JSON.parse(String(selectedHistoryRow.value || '{}'));
     } catch {
-      return { ok: false, error: 'Histórico encontrado, mas o JSON do item veeam.get.metrics é inválido.' };
+      return { ok: false, error: `Histórico encontrado, mas o JSON do item ${itemKey} é inválido.` };
     }
 
     return {
@@ -158,6 +598,51 @@ export class BackupService {
         validatedItem: validatedItem.data,
         latest: selectedHistoryRow,
         metricsJson,
+      },
+    };
+  }
+
+  private mergeVeeamMetricsJson(primary: Record<string, any>, secondary?: Record<string, any> | null) {
+    if (!secondary || typeof secondary !== 'object') return primary;
+    const merged = { ...(primary || {}) } as Record<string, any>;
+    for (const key of ['jobs_states', 'jobs_states_from_sessions', 'sessions']) {
+      const primaryRows = Array.isArray(primary?.[key]?.data) ? primary[key].data : [];
+      const secondaryRows = Array.isArray(secondary?.[key]?.data) ? secondary[key].data : [];
+      if (primaryRows.length === 0 && secondaryRows.length === 0) continue;
+      merged[key] = {
+        ...(primary?.[key] || secondary?.[key] || {}),
+        data: [...primaryRows, ...secondaryRows],
+      };
+    }
+    return merged;
+  }
+
+  private async getMergedVeeamMetricsSnapshot(input: {
+    companyId: string;
+    hostId: string;
+    itemId?: string;
+    date?: string;
+  }) {
+    const primarySnapshot = await this.getVeeamMetricsSnapshot(input);
+    if (!primarySnapshot.ok) return primarySnapshot;
+
+    const agentSnapshot = await this.getVeeamMetricsSnapshot({
+      companyId: input.companyId,
+      hostId: input.hostId,
+      date: input.date,
+      itemKey: 'veeam.agent.get.metrics',
+    });
+
+    return {
+      ok: true as const,
+      data: {
+        ...primarySnapshot.data,
+        metricsJson: this.mergeVeeamMetricsJson(
+          primarySnapshot.data.metricsJson,
+          agentSnapshot.ok ? agentSnapshot.data.metricsJson : null,
+        ),
+        agentItemId: agentSnapshot.ok ? agentSnapshot.data.validatedItem.itemId : null,
+        agentHistoryClock: agentSnapshot.ok ? agentSnapshot.data.latest.clock : null,
       },
     };
   }
@@ -186,6 +671,7 @@ export class BackupService {
   private validateRepositoryJobOverrideInput(body: {
     protectedSizeGB?: number | null;
     fullBackupSizeGB?: number | null;
+    fullWeeklyExecutionMinutes?: number | null;
     dailyChangePercent?: number | null;
     currentRetentionDays?: number | null;
     retentionDays?: number | null;
@@ -196,6 +682,7 @@ export class BackupService {
     const errors: string[] = [];
     const protectedSizeGB = body.protectedSizeGB ?? null;
     const fullBackupSizeGB = body.fullBackupSizeGB ?? null;
+    const fullWeeklyExecutionMinutes = body.fullWeeklyExecutionMinutes ?? null;
     const dailyChangePercent = body.dailyChangePercent ?? null;
     const currentRetentionDays = body.currentRetentionDays ?? null;
     const retentionDays = body.retentionDays ?? null;
@@ -205,6 +692,9 @@ export class BackupService {
 
     if (protectedSizeGB != null && protectedSizeGB <= 0) errors.push('protectedSizeGB deve ser maior que 0.');
     if (fullBackupSizeGB != null && fullBackupSizeGB <= 0) errors.push('fullBackupSizeGB deve ser maior que 0.');
+    if (fullWeeklyExecutionMinutes != null && fullWeeklyExecutionMinutes <= 0) {
+      errors.push('fullWeeklyExecutionMinutes deve ser maior que 0.');
+    }
     if (dailyChangePercent != null && dailyChangePercent < 0) errors.push('dailyChangePercent deve ser maior ou igual a 0.');
     if (currentRetentionDays != null && currentRetentionDays < 1) errors.push('currentRetentionDays deve ser maior ou igual a 1.');
     if (retentionDays != null && retentionDays < 1) errors.push('retentionDays deve ser maior ou igual a 1.');
@@ -212,6 +702,9 @@ export class BackupService {
     if (safetyMarginPercent != null && safetyMarginPercent < 0) errors.push('safetyMarginPercent deve ser maior ou igual a 0.');
     if (backupMode && !['Incremental', 'Synthetic Full', 'Active Full'].includes(backupMode)) {
       errors.push('backupMode deve ser Incremental, Synthetic Full ou Active Full.');
+    }
+    if (backupMode && backupMode !== 'Incremental' && fullWeeklyExecutionMinutes == null) {
+      errors.push('fullWeeklyExecutionMinutes é obrigatório para Synthetic Full e Active Full.');
     }
     return errors;
   }
@@ -373,7 +866,7 @@ export class BackupService {
     // #region debug-point D:veeam-repositories-entry
     (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'D',location:'backup.service.ts:getVeeamRepositories:entry',msg:'[DEBUG] Veeam repositories request received',data:{companyId:input.companyId,hostId:input.hostId,itemId:input.itemId||null,date:input.date||null},ts:Date.now()})}).catch(()=>{})})();
     // #endregion
-    const snapshot = await this.getVeeamMetricsSnapshot(input);
+    const snapshot = await this.getMergedVeeamMetricsSnapshot(input);
     this.logVeeamDebug('Resultado do item.get para repositórios', {
       companyId: input.companyId,
       hostId: input.hostId,
@@ -387,11 +880,11 @@ export class BackupService {
     // #endregion
     if (!snapshot.ok) return snapshot;
 
-    const { validatedItem, latest, metricsJson } = snapshot.data;
-    const repositoriesStates = Array.isArray(metricsJson?.repositories_states?.data) ? metricsJson.repositories_states.data : [];
-    const jobsStates = Array.isArray(metricsJson?.jobs_states?.data) ? metricsJson.jobs_states.data : [];
+    const { validatedItem, latest, metricsJson: mergedMetricsJson } = snapshot.data;
+    const repositoriesStates = Array.isArray(mergedMetricsJson?.repositories_states?.data) ? mergedMetricsJson.repositories_states.data : [];
+    const jobsStates = Array.isArray(mergedMetricsJson?.jobs_states?.data) ? mergedMetricsJson.jobs_states.data : [];
     // #region debug-point B:veeam-repositories-payload-shape
-    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'B',location:'backup.service.ts:getVeeamRepositories:payload',msg:'[DEBUG] Repository payload shape inspected',data:{repositoriesStates:Array.isArray(repositoriesStates)?repositoriesStates.length:-1,jobsStates:Array.isArray(jobsStates)?jobsStates.length:-1,hasRepositoriesStates:Array.isArray(metricsJson?.repositories_states?.data),hasJobsStates:Array.isArray(metricsJson?.jobs_states?.data)},ts:Date.now()})}).catch(()=>{})})();
+    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'B',location:'backup.service.ts:getVeeamRepositories:payload',msg:'[DEBUG] Repository payload shape inspected',data:{repositoriesStates:Array.isArray(repositoriesStates)?repositoriesStates.length:-1,jobsStates:Array.isArray(jobsStates)?jobsStates.length:-1,hasRepositoriesStates:Array.isArray(mergedMetricsJson?.repositories_states?.data),hasJobsStates:Array.isArray(mergedMetricsJson?.jobs_states?.data)},ts:Date.now()})}).catch(()=>{})})();
     // #endregion
     let repositoryOverrides: any[] = [];
     let jobOverrides: any[] = [];
@@ -423,7 +916,7 @@ export class BackupService {
     }
 
     const planning = buildVeeamRepositoryPlanning({
-      metricsJson,
+      metricsJson: mergedMetricsJson,
       repositoryOverrides: repositoryOverrides.map((row) => ({
         repositoryId: row.repositoryId,
         repositoryName: row.repositoryName,
@@ -442,6 +935,7 @@ export class BackupService {
         jobName: row.jobName,
         protectedSizeGB: row.protectedSizeGB,
         fullBackupSizeGB: row.fullBackupSizeGB,
+        fullWeeklyExecutionMinutes: row.fullWeeklyExecutionMinutes,
         dailyChangePercent: row.dailyChangePercent,
         currentRetentionDays: row.currentRetentionDays,
         retentionDays: row.retentionDays,
@@ -467,6 +961,9 @@ export class BackupService {
       jobOverridesFound: jobOverrides.length,
       incompleteRepositories: planning.meta.repositoriesIncomplete,
     });
+    // #region debug-point H:veeam-repositories-association-summary
+    (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'B',location:'backup.service.ts:getVeeamRepositories:association-summary',msg:'[DEBUG] Repository association summary',data:{rows:(planning.rows||[]).map((row:any)=>({repositoryId:row.repositoryId,name:row.name,source:row.source,jobsCount:row.jobsCount,jobs:(row.jobs||[]).slice(0,5).map((job:any)=>({jobId:job.jobId,name:job.name,repositoryName:job.repositoryName||null}))})).slice(0,10)},ts:Date.now()})}).catch(()=>{})})();
+    // #endregion
     // #region debug-point E:veeam-repositories-success
     (()=>{const fs=require('fs');let u='http://127.0.0.1:7777/event',s='veeam-repositories-prod';try{const e=fs.readFileSync('.dbg/veeam-repositories-prod.env','utf8');u=e.match(/DEBUG_SERVER_URL=(.+)/)?.[1]||u;s=e.match(/DEBUG_SESSION_ID=(.+)/)?.[1]||s}catch{}fetch(u,{method:'POST',body:JSON.stringify({sessionId:s,runId:'pre-fix',hypothesisId:'E',location:'backup.service.ts:getVeeamRepositories:success',msg:'[DEBUG] Repository planning built successfully',data:{rows:planning.rows.length,repositoriesInferred:planning.meta.repositoriesInferred,incompleteRepositories:planning.meta.repositoriesIncomplete},ts:Date.now()})}).catch(()=>{})})();
     // #endregion
@@ -577,6 +1074,7 @@ export class BackupService {
     jobName: string;
     protectedSizeGB?: number | null;
     fullBackupSizeGB?: number | null;
+    fullWeeklyExecutionMinutes?: number | null;
     dailyChangePercent?: number | null;
     currentRetentionDays?: number | null;
     retentionDays?: number | null;
@@ -596,6 +1094,7 @@ export class BackupService {
     const payload = {
       protectedSizeGB: this.toNumberOrNull(input.protectedSizeGB),
       fullBackupSizeGB: this.toNumberOrNull(input.fullBackupSizeGB),
+      fullWeeklyExecutionMinutes: this.toNumberOrNull(input.fullWeeklyExecutionMinutes),
       dailyChangePercent: this.toNumberOrNull(input.dailyChangePercent),
       currentRetentionDays: this.toNumberOrNull(input.currentRetentionDays),
       retentionDays: this.toNumberOrNull(input.retentionDays),
@@ -619,6 +1118,7 @@ export class BackupService {
         jobName: String(input.jobName || '').trim() || normalizedJobId,
         protectedSizeGB: payload.protectedSizeGB,
         fullBackupSizeGB: payload.fullBackupSizeGB,
+        fullWeeklyExecutionMinutes: payload.fullWeeklyExecutionMinutes,
         dailyChangePercent: payload.dailyChangePercent,
         currentRetentionDays: payload.currentRetentionDays != null ? Number(payload.currentRetentionDays) : null,
         retentionDays: payload.retentionDays != null ? Number(payload.retentionDays) : null,
@@ -637,6 +1137,7 @@ export class BackupService {
         jobName: String(input.jobName || '').trim() || normalizedJobId,
         protectedSizeGB: payload.protectedSizeGB,
         fullBackupSizeGB: payload.fullBackupSizeGB,
+        fullWeeklyExecutionMinutes: payload.fullWeeklyExecutionMinutes,
         dailyChangePercent: payload.dailyChangePercent,
         currentRetentionDays: payload.currentRetentionDays != null ? Number(payload.currentRetentionDays) : null,
         retentionDays: payload.retentionDays != null ? Number(payload.retentionDays) : null,
@@ -696,10 +1197,11 @@ export class BackupService {
       typeFilter: input.typeFilter || 'all',
       resultFilter: input.resultFilter || 'all',
     });
-    const snapshot = await this.getVeeamMetricsSnapshot({
+    const snapshot = await this.getMergedVeeamMetricsSnapshot({
       companyId: input.companyId,
       hostId: input.hostId,
       itemId: input.itemId,
+      date: input.date,
     });
     this.logVeeamDebug('Resultado do item.get', {
       companyId: input.companyId,
@@ -732,7 +1234,7 @@ export class BackupService {
         itemId: validatedItem.itemId,
         sessionsDataExists: false,
       });
-      return { ok: false, error: 'JSON do item veeam.get.metrics não possui sessions.data.' };
+      return { ok: false, error: 'JSON combinado dos itens Veeam não possui sessions.data.' };
     }
     this.logVeeamDebug('JSON com sessions.data', {
       companyId: input.companyId,

@@ -22,6 +22,7 @@ type RawJobOverride = {
   jobName?: string | null;
   protectedSizeGB?: number | null;
   fullBackupSizeGB?: number | null;
+  fullWeeklyExecutionMinutes?: number | null;
   dailyChangePercent?: number | null;
   currentRetentionDays?: number | null;
   retentionDays?: number | null;
@@ -68,6 +69,29 @@ type SessionTypeMaps = {
   byJobName: Map<string, 'Backup' | 'Replica'>;
 };
 
+type SessionRepositoryMaps = {
+  byJobId: Map<string, { repositoryId: string | null; repositoryName: string | null }>;
+  byJobName: Map<string, { repositoryId: string | null; repositoryName: string | null }>;
+};
+
+type NormalizedPlanningJobSource = 'jobs_states' | 'jobs_states_from_sessions' | 'sessions_fallback';
+
+type NormalizedPlanningJob = {
+  id: string;
+  name: string;
+  type: 'Backup' | 'Replica' | 'Unknown';
+  rawType: string;
+  status: string;
+  lastResult: string;
+  lastRun: string | null;
+  nextRun: string | null;
+  repositoryId: string | null;
+  repositoryName: string | null;
+  objectsCount: number | null;
+  sessionId: string | null;
+  source: NormalizedPlanningJobSource;
+};
+
 function toFiniteNumber(value: unknown): number | null {
   const numeric = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(numeric) ? numeric : null;
@@ -84,6 +108,12 @@ function normalizeRepositoryName(value: unknown) {
 
 function normalizeJobKey(value: unknown) {
   return String(value || '').trim().toLowerCase();
+}
+
+function extractJobRepositoryHint(value: unknown) {
+  const name = normalizeRepositoryName(value);
+  if (!name) return '';
+  return name.split('-')[0]?.trim().toLowerCase() || '';
 }
 
 function slugifyName(value: string) {
@@ -310,7 +340,218 @@ function buildSessionTypeMaps(metricsJson: RawMetricsJson): SessionTypeMaps {
 }
 
 function normalizePlanningJobType(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (
+    normalized === 'backupjob' ||
+    normalized === 'backup' ||
+    normalized === 'agentbackupjob' ||
+    normalized === 'entirecomputer' ||
+    normalized === 'computerbackup'
+  ) {
+    return 'Backup';
+  }
+  if (
+    normalized === 'replicajob' ||
+    normalized === 'replica' ||
+    normalized === 'vspherereplica' ||
+    normalized === 'hypervreplica'
+  ) {
+    return 'Replica';
+  }
   return normalizeVeeamType(String(value || '').trim());
+}
+
+function extractRepositoryReference(raw: any) {
+  const repositoryNameCandidates = [
+    raw?.repositoryName,
+    raw?.repoName,
+    raw?.targetRepositoryName,
+    raw?.repository?.name,
+    raw?.targetRepository?.name,
+  ];
+  const repositoryIdCandidates = [
+    raw?.repositoryId,
+    raw?.repoId,
+    raw?.targetRepositoryId,
+    raw?.repository?.id,
+    raw?.targetRepository?.id,
+  ];
+  const repositoryName =
+    repositoryNameCandidates.map((value) => normalizeRepositoryName(value)).find((value) => !!value) || null;
+  const repositoryId =
+    repositoryIdCandidates.map((value) => String(value || '').trim()).find((value) => !!value) || null;
+  return { repositoryId, repositoryName };
+}
+
+function inferRepositoryKeyFromJobName(jobName: string, repositories: Map<string, any>) {
+  const hint = extractJobRepositoryHint(jobName);
+  if (!hint) return null;
+
+  const entries = Array.from(repositories.entries());
+  const exactMatch = entries.find(([, repository]) => normalizeRepositoryName(repository?.name).toLowerCase() === hint);
+  if (exactMatch) return exactMatch[0];
+
+  // In some Hyper-V payloads the local repository jobs use the VBR prefix even when
+  // the repository is exposed as "Veeam Server" in repositories_states.
+  if (hint === 'vbr') {
+    const winLocalRepositories = entries.filter(([, repository]) => String(repository?.type || '').toLowerCase() === 'winlocal');
+    if (winLocalRepositories.length === 1) return winLocalRepositories[0][0];
+  }
+
+  return null;
+}
+
+function buildSessionRepositoryMaps(metricsJson: RawMetricsJson): SessionRepositoryMaps {
+  const byJobId = new Map<string, { repositoryId: string | null; repositoryName: string | null }>();
+  const byJobName = new Map<string, { repositoryId: string | null; repositoryName: string | null }>();
+  for (const raw of extractVeeamSessions(metricsJson)) {
+    const rawAny = raw as any;
+    const repositoryReference = extractRepositoryReference(rawAny);
+    if (!repositoryReference.repositoryId && !repositoryReference.repositoryName) continue;
+    const jobIdKey = String(raw?.jobId || '').trim();
+    const jobNameKey = normalizeJobKey(raw?.name);
+    if (jobIdKey && !byJobId.has(jobIdKey)) byJobId.set(jobIdKey, repositoryReference);
+    if (jobNameKey && !byJobName.has(jobNameKey)) byJobName.set(jobNameKey, repositoryReference);
+  }
+  return { byJobId, byJobName };
+}
+
+function normalizePlanningJobRecord(raw: any, source: NormalizedPlanningJobSource): NormalizedPlanningJob | null {
+  const id = resolvePlanningJobKey(raw?.id || raw?.jobId, raw?.name);
+  const name = normalizeRepositoryName(raw?.name);
+  if (!id || !name) return null;
+  const repositoryReference = extractRepositoryReference(raw);
+  const normalizedType =
+    normalizePlanningJobType(raw?.type) ||
+    normalizePlanningJobType(raw?.jobType) ||
+    normalizePlanningJobType(raw?.sessionType) ||
+    null;
+  return {
+    id,
+    name,
+    type: normalizedType || 'Unknown',
+    rawType: String(raw?.type || raw?.jobType || raw?.sessionType || ''),
+    status: String(raw?.status || raw?.state || ''),
+    lastResult: String(raw?.lastResult || raw?.result?.result || ''),
+    lastRun: parseIsoDate(raw?.lastRun || raw?.endTime || raw?.creationTime),
+    nextRun: parseIsoDate(raw?.nextRun),
+    repositoryId: repositoryReference.repositoryId,
+    repositoryName: repositoryReference.repositoryName,
+    objectsCount: toFiniteNumber(raw?.objectsCount),
+    sessionId: raw?.sessionId != null ? String(raw.sessionId) : (raw?.id != null ? String(raw.id) : null),
+    source,
+  };
+}
+
+function dedupeNormalizedJobs(rows: Array<NormalizedPlanningJob | null>) {
+  const jobs = new Map<string, NormalizedPlanningJob>();
+  for (const row of rows) {
+    if (!row) continue;
+    const current = jobs.get(row.id);
+    if (!current) {
+      jobs.set(row.id, row);
+      continue;
+    }
+    const currentLastRun = current.lastRun ? new Date(current.lastRun).getTime() : -Infinity;
+    const nextLastRun = row.lastRun ? new Date(row.lastRun).getTime() : -Infinity;
+    if (nextLastRun >= currentLastRun) {
+      jobs.set(row.id, {
+        ...current,
+        ...row,
+        repositoryId: row.repositoryId || current.repositoryId,
+        repositoryName: row.repositoryName || current.repositoryName,
+        objectsCount: row.objectsCount ?? current.objectsCount,
+        sessionId: row.sessionId || current.sessionId,
+      });
+    }
+  }
+  return Array.from(jobs.values());
+}
+
+function normalizeJobsFromJobsStates(rows: any[]) {
+  return dedupeNormalizedJobs(rows.map((raw) => normalizePlanningJobRecord(raw, 'jobs_states')));
+}
+
+function normalizeJobsFromSessionsFallback(rows: any[], repositoryMaps: SessionRepositoryMaps) {
+  return dedupeNormalizedJobs(
+    rows.map((raw) => {
+      const normalized = normalizePlanningJobRecord(raw, 'jobs_states_from_sessions');
+      if (!normalized) return null;
+      const jobIdKey = String(raw?.id || raw?.jobId || '').trim();
+      const jobNameKey = normalizeJobKey(raw?.name);
+      const repositoryReference =
+        (jobIdKey ? repositoryMaps.byJobId.get(jobIdKey) : null) ||
+        (jobNameKey ? repositoryMaps.byJobName.get(jobNameKey) : null) ||
+        null;
+      return {
+        ...normalized,
+        repositoryId: normalized.repositoryId || repositoryReference?.repositoryId || null,
+        repositoryName: normalized.repositoryName || repositoryReference?.repositoryName || null,
+      };
+    }),
+  );
+}
+
+function buildJobsFromSessions(metricsJson: RawMetricsJson) {
+  const repositoryMaps = buildSessionRepositoryMaps(metricsJson);
+  const jobs = new Map<string, any>();
+  for (const raw of extractVeeamSessions(metricsJson)) {
+    const rawAny = raw as any;
+    const normalizedType = normalizePlanningJobType(raw?.sessionType);
+    if (!normalizedType) {
+      continue;
+    }
+    const id = resolvePlanningJobKey(raw?.jobId, raw?.name);
+    const name = normalizeRepositoryName(raw?.name);
+    if (!id || !name) continue;
+    const lastRun = parseIsoDate(raw?.endTime || raw?.creationTime);
+    const lastRunMs = lastRun ? new Date(lastRun).getTime() : -Infinity;
+    const current = jobs.get(id);
+    const currentLastRunMs = current?.lastRun ? new Date(current.lastRun).getTime() : -Infinity;
+    if (current && currentLastRunMs > lastRunMs) continue;
+    const repositoryReference =
+      repositoryMaps.byJobId.get(String(raw?.jobId || '').trim()) ||
+      repositoryMaps.byJobName.get(normalizeJobKey(raw?.name)) ||
+      extractRepositoryReference(rawAny);
+    jobs.set(id, {
+      id,
+      name,
+      type: normalizedType,
+      rawType: String(raw?.sessionType || ''),
+      status: String(raw?.state || ''),
+      lastResult: String(raw?.result?.result || ''),
+      lastRun,
+      nextRun: null,
+      repositoryId: repositoryReference.repositoryId,
+      repositoryName: repositoryReference.repositoryName,
+      objectsCount: null,
+      sessionId: raw?.id != null ? String(raw.id) : null,
+      source: 'sessions_fallback' as const,
+    });
+  }
+  return Array.from(jobs.values());
+}
+
+function extractJobs(metricsJson: RawMetricsJson) {
+  const repositoryMaps = buildSessionRepositoryMaps(metricsJson);
+  const jobsStates = Array.isArray(metricsJson?.jobs_states?.data) ? metricsJson.jobs_states.data : [];
+  const jobsFromSessions = Array.isArray(metricsJson?.jobs_states_from_sessions?.data)
+    ? metricsJson.jobs_states_from_sessions.data
+    : [];
+  if (jobsStates.length > 0 && jobsFromSessions.length > 0) {
+    return dedupeNormalizedJobs([
+      ...normalizeJobsFromJobsStates(jobsStates),
+      ...normalizeJobsFromSessionsFallback(jobsFromSessions, repositoryMaps),
+    ]);
+  }
+  if (jobsStates.length > 0) {
+    return normalizeJobsFromJobsStates(jobsStates);
+  }
+  if (jobsFromSessions.length > 0) {
+    return normalizeJobsFromSessionsFallback(jobsFromSessions, repositoryMaps);
+  }
+  return buildJobsFromSessions(metricsJson);
 }
 
 function estimateRequiredStorage(input: {
@@ -520,7 +761,7 @@ export function buildVeeamRepositoryPlanning(input: {
   const repositoriesRaw = Array.isArray(input.metricsJson?.repositories_states?.data)
     ? input.metricsJson.repositories_states.data
     : [];
-  const jobsRaw = Array.isArray(input.metricsJson?.jobs_states?.data) ? input.metricsJson.jobs_states.data : [];
+  const jobsRaw = extractJobs(input.metricsJson);
   const sessionFrequencyMaps = buildSessionFrequencyMaps(input.metricsJson);
   const sessionDurationMaps = buildSessionDurationMaps(input.metricsJson);
   const sessionTypeMaps = buildSessionTypeMaps(input.metricsJson);
@@ -577,9 +818,7 @@ export function buildVeeamRepositoryPlanning(input: {
     const jobId = resolvePlanningJobKey(raw?.id || raw?.jobId, raw?.name);
     const jobName = String(raw?.name || '');
     const jobType =
-      normalizePlanningJobType(raw?.type) ||
-      normalizePlanningJobType(raw?.jobType) ||
-      normalizePlanningJobType(raw?.sessionType) ||
+      (raw?.type && raw.type !== 'Unknown' ? raw.type : null) ||
       (jobId && !jobId.startsWith('name__') ? sessionTypeMaps.byJobId.get(jobId) : null) ||
       (normalizeJobKey(jobName) ? sessionTypeMaps.byJobName.get(normalizeJobKey(jobName)) : null) ||
       null;
@@ -589,10 +828,19 @@ export function buildVeeamRepositoryPlanning(input: {
     }
 
     const repositoryId = resolveRepositoryKey(raw?.repositoryId, raw?.repositoryName);
-    const repositoryName = normalizeRepositoryName(raw?.repositoryName) || normalizeRepositoryName(raw?.name) || 'Repositório inferido';
+    const explicitRepositoryName = normalizeRepositoryName(raw?.repositoryName);
+    const onlyRepositoryKey = repositories.size === 1 ? Array.from(repositories.keys())[0] : '';
+    const repositoryName =
+      explicitRepositoryName ||
+      (onlyRepositoryKey ? normalizeRepositoryName(repositories.get(onlyRepositoryKey)?.name) : '') ||
+      'Repositório não identificado';
+    const inferredFromJobName =
+      !repositoryId && !explicitRepositoryName ? inferRepositoryKeyFromJobName(jobName, repositories) : null;
     const matchedKey = repositories.has(repositoryId)
       ? repositoryId
-      : nameToKey.get(repositoryName.toLowerCase()) || repositoryId;
+      : explicitRepositoryName
+        ? nameToKey.get(explicitRepositoryName.toLowerCase()) || repositoryId
+        : inferredFromJobName || onlyRepositoryKey || 'unassigned__repository-not-identified';
     if (!repositories.has(matchedKey)) {
       repositories.set(matchedKey, {
         repositoryId: matchedKey,
@@ -707,6 +955,7 @@ export function buildVeeamRepositoryPlanning(input: {
         const manualPlanning = {
           protectedSizeGB: round2(toFiniteNumber(jobOverride?.protectedSizeGB)),
           fullBackupSizeGB: round2(toFiniteNumber(jobOverride?.fullBackupSizeGB)),
+          fullWeeklyExecutionMinutes: round2(toFiniteNumber(jobOverride?.fullWeeklyExecutionMinutes)),
           dailyChangePercent: round2(toFiniteNumber(jobOverride?.dailyChangePercent)),
           currentRetentionDays: jobOverride?.currentRetentionDays != null ? Number(jobOverride.currentRetentionDays) : null,
           retentionDays: jobOverride?.retentionDays != null ? Number(jobOverride.retentionDays) : null,
