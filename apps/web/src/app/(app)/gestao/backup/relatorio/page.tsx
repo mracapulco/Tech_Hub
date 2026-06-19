@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api";
 import { getToken } from "@/lib/auth";
@@ -177,11 +177,27 @@ function buildPdfHtml(input: {
 }) {
   const { title, companyLabel, companyLogo, timeline } = input;
   const bucketCount = timeline.rows[0]?.buckets.length || 0;
-  const majorStep = Math.max(1, Math.round(120 / Math.max(15, timeline.meta.bucketMinutes)));
-  const scaleLabels = timeline.rows[0]?.buckets
-    .map((bucket, index) => {
-      const showLabel = index % majorStep === 0;
-      return `<div class="scale-label">${showLabel ? escapeHtml(bucket.label) : "&nbsp;"}</div>`;
+  const compactPdfBucketLabels = bucketCount >= 32 || timeline.meta.bucketMinutes <= 15;
+  const routinePdfWidth = Math.min(
+    220,
+    Math.max(140, Math.ceil(Math.max("Rotina".length, ...timeline.rows.map((row) => row.name.length)) * 7.2 + 28)),
+  );
+  const typePdfWidth = Math.min(
+    96,
+    Math.max(64, Math.ceil(Math.max("Tipo".length, ...timeline.rows.map((row) => row.type.length)) * 7 + 20)),
+  );
+  const bucketHeaders = timeline.rows[0]?.buckets
+    .map((bucket) => {
+      const { hours, minutes } = getBucketLabelLines(bucket.label);
+      return `
+        <th class="bucket-heading ${compactPdfBucketLabels ? "bucket-heading-compact" : ""}">
+          ${
+            compactPdfBucketLabels
+              ? `<span class="bucket-label-vertical">${escapeHtml(bucket.label)}</span>`
+              : `<span class="bucket-label"><span>${escapeHtml(hours)}</span><span>${escapeHtml(minutes)}</span></span>`
+          }
+        </th>
+      `;
     })
     .join("") || "";
   const rowsHtml = timeline.rows
@@ -189,7 +205,11 @@ function buildPdfHtml(input: {
       const timelineCells = row.buckets
         .map((bucket) => {
           const resultClass = bucket.active ? `state-${String(bucket.result || "Unknown").toLowerCase()}` : "";
-          return `<div class="timeline-cell ${resultClass}" title="${escapeHtml(bucket.title)}"></div>`;
+          return `
+            <td class="bucket-cell">
+              <div class="timeline-cell ${resultClass}" title="${escapeHtml(bucket.title)}"></div>
+            </td>
+          `;
         })
         .join("");
 
@@ -199,11 +219,7 @@ function buildPdfHtml(input: {
             <div class="routine-name">${escapeHtml(row.name)}</div>
           </td>
           <td class="type-cell">${escapeHtml(row.type)}</td>
-          <td class="timeline-column">
-            <div class="timeline-grid" style="grid-template-columns: repeat(${Math.max(1, bucketCount)}, minmax(0, 1fr));">
-              ${timelineCells}
-            </div>
-          </td>
+          ${timelineCells}
         </tr>
       `;
     })
@@ -325,8 +341,14 @@ function buildPdfHtml(input: {
             font-weight: 700;
             margin: 16px 0 8px;
           }
-          table { width: 100%; border-collapse: collapse; table-layout: auto; }
-          th, td { border: 1px solid #dbe2ea; padding: 8px; vertical-align: top; }
+          .table-shell {
+            border: 1px solid #dbe2ea;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #ffffff;
+          }
+          table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+          th, td { border-right: 1px solid #dbe2ea; border-bottom: 1px solid #dbe2ea; padding: 8px; vertical-align: top; }
           th {
             background: #f8fafc;
             font-size: 11px;
@@ -336,50 +358,60 @@ function buildPdfHtml(input: {
           td {
             font-size: 11px;
             color: #111827;
+            background: #ffffff;
           }
           .routine-cell, .routine-heading {
-            width: 1%;
             white-space: nowrap;
+            padding: 8px 12px;
+          }
+          .routine-heading {
+            text-align: center;
+            vertical-align: middle;
           }
           .type-cell, .type-heading {
-            width: 1%;
             white-space: nowrap;
             text-align: center;
             vertical-align: middle;
             font-weight: 600;
+            padding: 8px 10px;
           }
-          .timeline-heading, .timeline-column { width: auto; }
+          .timeline-heading { width: auto; }
           .routine-name { font-weight: 700; }
-          .scale-grid, .timeline-grid {
-            display: grid;
-            gap: 2px;
-            width: 100%;
+          .bucket-heading {
+            padding: 8px 4px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
           }
-          .timeline-heading {
-            padding: 0;
+          .bucket-heading-compact {
+            padding: 4px 2px;
             vertical-align: bottom;
           }
-          .timeline-heading-wrap {
+          .bucket-label {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            padding: 8px;
+            align-items: center;
+            gap: 1px;
           }
-          .timeline-heading-title {
-            font-size: 11px;
-            font-weight: 700;
-            color: #374151;
-            text-align: left;
-          }
-          .scale-label {
-            font-size: 7px;
-            color: #6b7280;
-            text-align: center;
-            line-height: 1;
+          .bucket-label-vertical {
+            display: inline-block;
+            height: 56px;
             white-space: nowrap;
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            font-size: 9px;
+            line-height: 1;
+          }
+          .bucket-cell {
+            padding: 2px;
+            text-align: center;
+            vertical-align: middle;
           }
           .timeline-cell {
-            height: 14px;
+            height: 24px;
+            width: 100%;
             border-radius: 3px;
             border: 1px solid #e5e7eb;
             background: #ffffff;
@@ -399,6 +431,9 @@ function buildPdfHtml(input: {
             justify-content: space-between;
             gap: 12px;
           }
+          thead th:last-child,
+          tbody td:last-child { border-right: 0; }
+          tbody tr:last-child td { border-bottom: 0; }
           @media print {
             * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
@@ -449,25 +484,25 @@ function buildPdfHtml(input: {
             <span class="legend-item"><span class="legend-swatch" style="background:#3b82f6;border-color:#3b82f6;"></span>Em execução</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#9ca3af;border-color:#9ca3af;"></span>Desconhecido</span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th class="routine-heading">Rotina</th>
-                <th class="type-heading">Tipo</th>
-                <th class="timeline-heading">
-                  <div class="timeline-heading-wrap">
-                    <div class="timeline-heading-title">Timeline</div>
-                    <div class="scale-grid" style="grid-template-columns: repeat(${Math.max(1, bucketCount)}, minmax(0, 1fr));">
-                      ${scaleLabels}
-                    </div>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
-          </table>
+          <div class="table-shell">
+            <table>
+              <colgroup>
+                <col style="width:${routinePdfWidth}px;" />
+                <col style="width:${typePdfWidth}px;" />
+                ${timeline.rows[0]?.buckets.map(() => "<col />").join("") || ""}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="routine-heading">Rotina</th>
+                  <th class="type-heading">Tipo</th>
+                  ${bucketHeaders}
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
 
           <div class="footer">
             <span>Relatório gerado por Tech Hub</span>
@@ -501,6 +536,10 @@ export default function BackupReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState("");
+  const [routineColumnWidth, setRoutineColumnWidth] = useState(0);
+  const [typeColumnWidth, setTypeColumnWidth] = useState(0);
+  const [compactBucketLabels, setCompactBucketLabels] = useState(false);
+  const timelineTableRef = useRef<HTMLTableElement | null>(null);
 
   useEffect(() => {
     const token = getToken();
@@ -621,6 +660,56 @@ export default function BackupReportPage() {
       void loadTimeline();
     }
   }, [companyId, hostId]);
+
+  useEffect(() => {
+    const table = timelineTableRef.current;
+    if (!table) {
+      setRoutineColumnWidth(0);
+      setTypeColumnWidth(0);
+      setCompactBucketLabels(false);
+      return;
+    }
+
+    const measureColumnWidth = (cells: HTMLElement[], minWidth: number) => {
+      return cells.reduce((current, cell) => {
+        const contentWidth = Math.ceil(cell.scrollWidth);
+        const style = window.getComputedStyle(cell);
+        const borders = Math.ceil(
+          Number.parseFloat(style.borderLeftWidth || "0") + Number.parseFloat(style.borderRightWidth || "0"),
+        );
+        return Math.max(current, contentWidth + borders + 8);
+      }, minWidth);
+    };
+
+    const updateWidth = () => {
+      const routineCells = Array.from(table.querySelectorAll<HTMLElement>("[data-timeline-routine-cell]"));
+      const typeCells = Array.from(table.querySelectorAll<HTMLElement>("[data-timeline-type-cell]"));
+      const nextWidth = measureColumnWidth(routineCells, 96);
+      const nextTypeWidth = measureColumnWidth(typeCells, 64);
+      const bucketCount = timeline?.rows[0]?.buckets.length || 0;
+      const availableWidth = table.parentElement?.clientWidth || table.getBoundingClientRect().width || 0;
+      const remainingWidth = Math.max(0, availableWidth - nextWidth - nextTypeWidth);
+      const bucketWidth = bucketCount > 0 ? remainingWidth / bucketCount : remainingWidth;
+      setRoutineColumnWidth((current) => (current === nextWidth ? current : nextWidth));
+      setTypeColumnWidth((current) => (current === nextTypeWidth ? current : nextTypeWidth));
+      setCompactBucketLabels((current) => (current === (bucketWidth > 0 && bucketWidth < 24) ? current : bucketWidth > 0 && bucketWidth < 24));
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+
+    const observer = new ResizeObserver(() => updateWidth());
+    observer.observe(table);
+    window.addEventListener("resize", updateWidth);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  }, [timeline]);
 
   const selectedCompanyLabel = useMemo(() => {
     const company = companies.find((item) => item.id === companyId);
@@ -852,20 +941,52 @@ export default function BackupReportPage() {
           </div>
         ) : (
           <div className="overflow-x-auto rounded border border-border">
-            <table className="min-w-max border-separate border-spacing-0 text-sm">
+            <table ref={timelineTableRef} className="min-w-full w-full table-fixed border-separate border-spacing-0 text-sm">
+              <colgroup>
+                <col style={{ width: routineColumnWidth ? `${routineColumnWidth}px` : undefined }} />
+                <col style={{ width: typeColumnWidth ? `${typeColumnWidth}px` : undefined }} />
+                {timeline.rows[0]?.buckets.map((bucket) => <col key={`col-${bucket.start}`} />)}
+              </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-30 min-w-[180px] border-b border-r border-border bg-gray-50 px-3 py-2 text-left">Rotina</th>
-                  <th className="sticky z-30 min-w-[76px] border-b border-r border-border bg-gray-50 px-2 py-2 text-center" style={{ left: 180 }}>Tipo</th>
+                  <th
+                    data-timeline-routine-cell
+                    className="sticky left-0 z-30 w-[1%] whitespace-nowrap border-b border-r border-border bg-gray-50 px-3 py-2 text-left"
+                    style={{ width: routineColumnWidth || undefined, minWidth: routineColumnWidth || undefined }}
+                  >
+                    Rotina
+                  </th>
+                  <th
+                    data-timeline-type-cell
+                    className="sticky z-30 w-[1%] whitespace-nowrap border-b border-r border-border bg-gray-50 px-2 py-2 text-center"
+                    style={{
+                      left: routineColumnWidth,
+                      width: typeColumnWidth || undefined,
+                      minWidth: typeColumnWidth || undefined,
+                    }}
+                  >
+                    Tipo
+                  </th>
                   {timeline.rows[0]?.buckets.map((bucket) => (
                     <th
                       key={bucket.start}
-                      className="w-[30px] min-w-[30px] border-b border-r border-border bg-gray-50 px-1 py-2 text-center text-[10px] font-medium leading-none"
+                      className={`border-b border-r border-border bg-gray-50 px-1 text-center text-[10px] font-medium leading-none ${
+                        compactBucketLabels ? "py-1 align-bottom" : "py-2"
+                      }`}
                     >
-                      <span className="flex flex-col items-center">
-                        <span>{getBucketLabelLines(bucket.label).hours}</span>
-                        <span>{getBucketLabelLines(bucket.label).minutes}</span>
-                      </span>
+                      {compactBucketLabels ? (
+                        <span
+                          className="mx-auto block h-16 whitespace-nowrap text-[9px] leading-none"
+                          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+                        >
+                          {bucket.label}
+                        </span>
+                      ) : (
+                        <span className="flex flex-col items-center">
+                          <span>{getBucketLabelLines(bucket.label).hours}</span>
+                          <span>{getBucketLabelLines(bucket.label).minutes}</span>
+                        </span>
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -873,17 +994,29 @@ export default function BackupReportPage() {
               <tbody>
                 {timeline.rows.map((row) => (
                   <tr key={row.jobId}>
-                    <td className="sticky left-0 z-20 border-b border-r border-border bg-white px-3 py-2 align-middle">
+                    <td
+                      data-timeline-routine-cell
+                      className="sticky left-0 z-20 whitespace-nowrap border-b border-r border-border bg-white px-3 py-2 align-middle"
+                      style={{ width: routineColumnWidth || undefined, minWidth: routineColumnWidth || undefined }}
+                    >
                       <div className="font-medium">{row.name}</div>
                     </td>
-                    <td className="sticky z-20 border-b border-r border-border bg-white px-2 py-2 text-center align-middle text-xs font-medium" style={{ left: 180 }}>
+                    <td
+                      data-timeline-type-cell
+                      className="sticky z-20 whitespace-nowrap border-b border-r border-border bg-white px-2 py-2 text-center align-middle text-xs font-medium"
+                      style={{
+                        left: routineColumnWidth,
+                        width: typeColumnWidth || undefined,
+                        minWidth: typeColumnWidth || undefined,
+                      }}
+                    >
                       {row.type}
                     </td>
                     {row.buckets.map((bucket) => (
                       <td key={`${row.jobId}-${bucket.start}`} className="border-b border-r border-border px-0.5 py-0.5">
                         <div
                           title={bucket.title}
-                          className={`h-7 w-[30px] rounded-sm ${cellClass(bucket.result, bucket.active)} ${bucket.active ? "cursor-help" : ""}`}
+                          className={`h-7 w-full rounded-sm ${cellClass(bucket.result, bucket.active)} ${bucket.active ? "cursor-help" : ""}`}
                         />
                       </td>
                     ))}

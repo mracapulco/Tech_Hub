@@ -70,6 +70,8 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
   private logVeeamDebug(_message: string, _data: Record<string, any>) {}
 
   private toNumberOrNull(value: unknown) {
+    if (value == null) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
     const numeric = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(numeric) ? numeric : null;
   }
@@ -541,11 +543,40 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     itemKey?: string;
   }): Promise<VeeamMetricsSnapshotResult> {
     const itemKey = String(input.itemKey || 'veeam.get.metrics');
-    const validatedItem = await this.zabbixService.getValidatedItem(input.companyId, {
-      hostId: input.hostId,
-      itemId: input.itemId,
-      itemKey,
-    });
+    if (input.itemId) {
+      const storedSnapshot = await this.getStoredVeeamMetricsSnapshot({
+        companyId: input.companyId,
+        hostId: input.hostId,
+        itemId: input.itemId,
+        date: input.date,
+        validatedItem: {
+          itemId: input.itemId,
+          hostId: input.hostId,
+          key: itemKey,
+          name: itemKey,
+          status: '0',
+          state: '0',
+          error: '',
+          valueType: 4,
+        },
+      });
+      if (storedSnapshot?.ok) {
+        return storedSnapshot;
+      }
+    }
+    let validatedItem;
+    try {
+      validatedItem = await this.zabbixService.getValidatedItem(input.companyId, {
+        hostId: input.hostId,
+        itemId: input.itemId,
+        itemKey,
+      });
+    } catch (error: any) {
+      return {
+        ok: false,
+        error: error?.message || `Falha ao validar item ${itemKey} no Zabbix.`,
+      };
+    }
     if (!validatedItem.ok || !validatedItem.data) {
       return { ok: false, error: validatedItem.error || `Falha ao validar item ${itemKey} no Zabbix.` };
     }
@@ -561,7 +592,15 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
       return storedSnapshot;
     }
 
-    const history = await this.zabbixService.getItemTextHistory(input.companyId, validatedItem.data.itemId);
+    let history;
+    try {
+      history = await this.zabbixService.getItemTextHistory(input.companyId, validatedItem.data.itemId);
+    } catch (error: any) {
+      return {
+        ok: false,
+        error: error?.message || `Falha ao consultar histórico do item ${itemKey}.`,
+      };
+    }
     if (!history.ok) {
       return { ok: false, error: history.error || `Falha ao consultar histórico do item ${itemKey}.` };
     }

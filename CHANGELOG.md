@@ -4,6 +4,20 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.4.5] — 2026-06-19
+
+### Alterado
+- Gestão • Backup: timeline web passa a distribuir a largura da tabela de acordo com a área disponível, preservando as colunas `Rotina` e `Tipo` pelo tamanho real do conteúdo e deixando os buckets de tempo ocuparem o espaço restante.
+- Gestão • Backup: exportação PDF da timeline foi reformulada para se aproximar visualmente da visualização interna da plataforma, com buckets individuais por horário, colunas dedicadas para `Rotina` e `Tipo` e adaptação de rótulos em cenários mais granulares.
+
+### Corrigido
+- Gestão • Backup: salvamento do planejamento por job volta a aceitar rotinas `Incremental`, preservando `null` em campos opcionais e evitando a validação incorreta de `fullWeeklyExecutionMinutes`.
+- Gestão • Backup: leitura de snapshots Veeam prioriza o snapshot persistido quando o `itemId` já é conhecido e deixa de quebrar o reload da tela quando o Zabbix falha durante a consulta ao vivo.
+- Gestão • Backup: exportação PDF da timeline deixa de esmagar as duas primeiras colunas e passa a centralizar corretamente o cabeçalho `Rotina`.
+
+### Operacional
+- Versões atualizadas: root e web `0.4.5`.
+
 ## [0.4.4] — 2026-06-18
 
 ### Adicionado
