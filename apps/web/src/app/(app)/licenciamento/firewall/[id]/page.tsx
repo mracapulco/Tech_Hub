@@ -15,6 +15,8 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
   const [addresses, setAddresses] = useState<IpAddr[]>([]);
   const [companyLogo, setCompanyLogo] = useState<string>('');
   const [companyName, setCompanyName] = useState<string>('');
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentChecked, setAttachmentChecked] = useState(false);
 
   function imgUrl(u?: string | null) {
     if (!u) return '';
@@ -43,6 +45,33 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
       }
     })();
   }, [token, id]);
+
+  useEffect(() => {
+    const rawUrl = lic?.licenseFileUrl?.trim();
+    // Um valor sem nome de arquivo no final (ex.: "/uploads" ou "/uploads/") não aponta para um arquivo de verdade.
+    const hasFileName = !!rawUrl && /\/[^/]+\.[a-zA-Z0-9]+$/.test(rawUrl);
+    if (!hasFileName) {
+      setAttachmentUrl(null);
+      setAttachmentChecked(true);
+      return;
+    }
+    const url = imgUrl(rawUrl);
+    let cancelled = false;
+    setAttachmentChecked(false);
+    fetch(url, { method: 'HEAD' })
+      .then((res) => {
+        if (!cancelled) setAttachmentUrl(res.ok ? url : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAttachmentUrl(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAttachmentChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lic?.licenseFileUrl]);
 
   function exportPDF() {
     if (!lic) return;
@@ -208,8 +237,10 @@ export default function FirewallLicView({ params }: { params: { id: string } }) 
           </div>
           <div className="bg-card border border-border rounded p-4">
             <div className="font-semibold mb-3">Anexo</div>
-            {lic.licenseFileUrl ? (
-              <iframe src={`${process.env.NEXT_PUBLIC_API_URL}${lic.licenseFileUrl}`} className="w-full h-[480px] border border-border rounded" />
+            {!attachmentChecked ? (
+              <div className="text-sm text-muted">Verificando anexo...</div>
+            ) : attachmentUrl ? (
+              <iframe src={attachmentUrl} className="w-full h-[480px] border border-border rounded" />
             ) : (
               <div className="text-sm text-muted">Nenhum anexo disponível.</div>
             )}

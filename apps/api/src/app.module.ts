@@ -16,7 +16,9 @@ import { IpamModule } from './ipam/ipam.module';
 import { SitesModule } from './sites/sites.module';
 import { VlansModule } from './vlans/vlans.module';
 import { ZabbixModule } from './integrations/zabbix/zabbix.module';
+import { GlpiModule } from './integrations/glpi/glpi.module';
 import { FirewallModule } from './licensing/firewall/firewall.module';
+import { MicrosoftModule } from './licensing/microsoft/microsoft.module';
 import { BackupModule } from './backup/backup.module';
 import { AdfsModule } from './adfs/adfs.module';
 
@@ -40,7 +42,9 @@ import { AdfsModule } from './adfs/adfs.module';
     SitesModule,
     VlansModule,
     ZabbixModule,
+    GlpiModule,
     FirewallModule,
+    MicrosoftModule,
     BackupModule,
     AdfsModule,
   ],

@@ -138,6 +138,11 @@ export default function EmpresaDetailPage() {
             Voltar
           </button>
           {canEdit && (
+            <Link href={`/configuracoes/empresas/${id}/glpi`} className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">
+              GLPI
+            </Link>
+          )}
+          {canEdit && (
             <Link href={`/configuracoes/empresas/${id}/editar`} className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
               Editar
             </Link>
@@ -169,6 +174,20 @@ export default function EmpresaDetailPage() {
         <p><strong>CEP:</strong> {company.zipcode || '-'}</p>
         <p><strong>Telefone:</strong> {company.phone || '-'}</p>
       </div>
+
+      {canEdit && (
+        <div className="mt-6 rounded bg-white p-4 shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Integração GLPI</h2>
+              <p className="mt-1 text-sm text-gray-600">A configuração do GLPI fica vinculada a esta empresa e usa uma única entidade-base do GLPI.</p>
+            </div>
+            <Link href={`/configuracoes/empresas/${id}/glpi`} className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">
+              Configurar GLPI
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmação de exclusão com dependências */}
       {confirmDelete && dependencies && (

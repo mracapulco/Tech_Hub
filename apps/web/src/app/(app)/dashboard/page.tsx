@@ -1,14 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { titleCase } from "@/lib/format";
 
 type UsersListResponse = { ok: boolean; data?: any[]; error?: string };
 type CompaniesListResponse = { ok: boolean; data?: any[]; error?: string };
 type MaturityListResponse = { ok: boolean; data?: any[]; error?: string };
 
+function firstWord(name: string) {
+  const trimmed = (name || "").trim();
+  const parts = trimmed.split(/\s+/);
+  return parts.length > 1 ? parts[0] : trimmed;
+}
+
 export default function DashboardPage() {
+  const router = useRouter();
   const [usersCount, setUsersCount] = useState<number>(0);
   const [companiesCount, setCompaniesCount] = useState<number>(0);
   const [maturityTestsCount, setMaturityTestsCount] = useState<number>(0);
@@ -16,8 +25,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [ipamTotals, setIpamTotals] = useState<{ subnets: number; used: number; capacity: number; occupancy: number }>({ subnets: 0, used: 0, capacity: 0, occupancy: 0 });
   const [topSubnets, setTopSubnets] = useState<Array<{ name: string; cidr: string; occ: number; company: string; site: string }>>([]);
-  const [zabbixConfigured, setZabbixConfigured] = useState<number>(0);
-  const [upcomingFw, setUpcomingFw] = useState<Array<{ vendor: string; model: string; serial: string; days: number; expiresAt: string; company: string }>>([]);
+  const [upcomingFw, setUpcomingFw] = useState<Array<{ id: string; vendor: string; model: string; serial: string; days: number; expiresAt: string; company: string }>>([]);
+  const [upcomingMs, setUpcomingMs] = useState<Array<{ id: string; company: string; category: string; expiresAt: string; days: number }>>([]);
   const [sitesCount, setSitesCount] = useState<number>(0);
 
   function capacityFromCidr(c: string): number {
@@ -64,8 +73,7 @@ export default function DashboardPage() {
           let totalUsed = 0;
           let totalCapacity = 0;
           const topMap = new Map<string, { name: string; cidr: string; occ: number; company: string; site: string }>();
-          let zCfg = 0;
-          const fwList: Array<{ vendor: string; model: string; serial: string; days: number; expiresAt: string; company: string }> = [];
+          const fwList: Array<{ id: string; vendor: string; model: string; serial: string; days: number; expiresAt: string; company: string }> = [];
           const seenFw = new Set<string>();
           const daysLeft = (d: string) => { try { const dt = new Date(d).getTime(); const now = Date.now(); return Math.ceil((dt - now) / (1000*60*60*24)); } catch { return 0; } };
           let totalSites = 0;
@@ -90,8 +98,6 @@ export default function DashboardPage() {
               if (!existing || occ > existing.occ) topMap.set(key, { name: s.name, cidr: s.cidr, occ, company: companyName, site: siteName });
             }
             totalSites += sitesList.length;
-            const cfgRes = await apiGet<{ ok: boolean; data?: any }>(`/integrations/zabbix/config?companyId=${comp.id}`, token);
-            if (cfgRes?.ok && cfgRes.data?.url) zCfg += 1;
             const fwRes = await apiGet<any[]>(`/licensing/firewall?companyId=${comp.id}`, token);
             const items = Array.isArray(fwRes) ? fwRes : [];
             for (const lic of items) {
@@ -99,7 +105,7 @@ export default function DashboardPage() {
               if (seenFw.has(key)) continue;
               seenFw.add(key);
               const d = daysLeft(lic.expiresAt);
-              fwList.push({ vendor: lic.vendor, model: lic.model, serial: lic.serial, days: d, expiresAt: lic.expiresAt, company: (comp.fantasyName || comp.name) });
+              fwList.push({ id: lic.id, vendor: lic.vendor, model: lic.model, serial: lic.serial, days: d, expiresAt: lic.expiresAt, company: (comp.fantasyName || comp.name) });
             }
           }
           const uniques = Array.from(topMap.values()).sort((a, b) => b.occ - a.occ).slice(0, 5);
@@ -107,9 +113,25 @@ export default function DashboardPage() {
           const occAvg = totalCapacity > 0 ? Math.round((totalUsed / totalCapacity) * 100) : 0;
           setIpamTotals({ subnets: totalSubnets, used: totalUsed, capacity: totalCapacity, occupancy: occAvg });
           setSitesCount(totalSites);
-          setZabbixConfigured(zCfg);
           fwList.sort((a, b) => a.days - b.days);
           setUpcomingFw(fwList.slice(0, 10));
+
+          const msRes = await apiGet<{ ok: boolean; data?: any[] }>(`/licensing/microsoft/agreements-upcoming?limit=10`, token);
+          const msItems = msRes?.ok && Array.isArray(msRes.data) ? msRes.data : [];
+          setUpcomingMs(
+            msItems.map((item: any) => {
+              const expiresAt = item.renewalDate || item.expiresAt;
+              return {
+                id: item.id,
+                // companyName vem cadastrado por nós (já bem formatado); externalCustomerName vem
+                // em caixa alta do distribuidor, então só esse passa por titleCase.
+                company: item.companyName || titleCase(item.externalCustomerName) || "Empresa não mapeada",
+                category: item.category || "-",
+                expiresAt,
+                days: daysLeft(expiresAt),
+              };
+            }),
+          );
         } catch {}
       })
       .catch(() => setError("Falha ao comunicar com a API."))
@@ -172,13 +194,6 @@ export default function DashboardPage() {
             )}
           </div>
         </section>
-        <section className="p-4 bg-card border border-border rounded shadow flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold">Zabbix</h2>
-            <p className="text-sm font-medium text-gray-600">Empresas integradas</p>
-          </div>
-          <div className="text-3xl font-bold text-primary">{loading ? "-" : zabbixConfigured}</div>
-        </section>
         <section className="p-4 bg-card border border-border rounded shadow max-h-64 overflow-auto">
           <h2 className="font-semibold mb-2">Firewall — próximos a expirar</h2>
           {upcomingFw.length === 0 ? (
@@ -198,7 +213,11 @@ export default function DashboardPage() {
                 {upcomingFw.slice(0,10).map((i, idx) => {
                   const cls = i.days <= 30 ? 'text-red-600' : i.days <= 60 ? 'text-yellow-600' : 'text-green-600';
                   return (
-                    <tr key={idx} className="border-b border-border">
+                    <tr
+                      key={idx}
+                      onClick={() => router.push(`/licenciamento/firewall/${i.id}`)}
+                      className="border-b border-border cursor-pointer hover:bg-border/40"
+                    >
                       <td className="py-1">{i.company}</td>
                       <td className="py-1">{i.model}</td>
                       <td className="py-1">{i.serial}</td>
@@ -211,12 +230,46 @@ export default function DashboardPage() {
             </table>
           )}
         </section>
+        <section className="p-4 bg-card border border-border rounded shadow max-h-64 overflow-auto">
+          <h2 className="font-semibold mb-2">Licenciamento Microsoft — próximos a vencer</h2>
+          {upcomingMs.length === 0 ? (
+            <div className="text-sm text-muted">Nenhum registro.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left border-b border-border">
+                  <th className="py-2">Empresa</th>
+                  <th className="py-2">Categoria</th>
+                  <th className="py-2">Venc.</th>
+                  <th className="py-2">Dias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {upcomingMs.map((i) => {
+                  const cls = i.days <= 30 ? 'text-red-600' : i.days <= 60 ? 'text-yellow-600' : 'text-green-600';
+                  return (
+                  <tr
+                    key={i.id}
+                    onClick={() => router.push(`/licenciamento/microsoft/${i.id}`)}
+                    className="border-b border-border cursor-pointer hover:bg-border/40"
+                  >
+                    <td className="py-1">{firstWord(i.company)}</td>
+                    <td className="py-1">{i.category}</td>
+                    <td className="py-1">{i.expiresAt ? new Date(i.expiresAt).toLocaleDateString() : "—"}</td>
+                    <td className={`py-1 ${cls}`}>{i.days}</td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
       </div>
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <a href="/ipam" className="p-4 bg-card border border-border rounded shadow text-primary">Abrir IPAM</a>
         <a href="/ipam/sites" className="p-4 bg-card border border-border rounded shadow text-primary">Gerir Sites</a>
-        <a href="/configuracoes/zabbix" className="p-4 bg-card border border-border rounded shadow text-primary">Configurar Zabbix</a>
+        <a href="/licenciamento/microsoft" className="p-4 bg-card border border-border rounded shadow text-primary">Licenciamento Microsoft</a>
       </div>
     </main>
   );

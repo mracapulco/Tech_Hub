@@ -49,6 +49,13 @@ type TimelinePayload = {
   message?: string;
 };
 
+type QuickFilterPreset = {
+  id: string;
+  label: string;
+  type: "all" | TimelineType;
+  result: "all" | TimelineResult;
+};
+
 const RESULT_LABELS: Record<TimelineResult, string> = {
   Success: "Sucesso",
   Failed: "Falha",
@@ -56,6 +63,15 @@ const RESULT_LABELS: Record<TimelineResult, string> = {
   Running: "Em execução",
   Unknown: "Desconhecido",
 };
+
+const QUICK_FILTER_PRESETS: QuickFilterPreset[] = [
+  { id: "all", label: "Tudo", type: "all", result: "all" },
+  { id: "backup", label: "Backups", type: "Backup", result: "all" },
+  { id: "replica", label: "Réplicas", type: "Replica", result: "all" },
+  { id: "failed", label: "Falhas", type: "all", result: "Failed" },
+  { id: "warning", label: "Avisos", type: "all", result: "Warning" },
+  { id: "running", label: "Em execução", type: "all", result: "Running" },
+];
 
 function getTodayInSaoPaulo() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -172,12 +188,15 @@ function buildCsvContent(timeline: TimelinePayload) {
 function buildPdfHtml(input: {
   title: string;
   companyLabel: string;
+  hostLabel: string;
+  filterSummary: string;
   companyLogo?: string;
   timeline: TimelinePayload;
 }) {
-  const { title, companyLabel, companyLogo, timeline } = input;
+  const { title, companyLabel, hostLabel, filterSummary, companyLogo, timeline } = input;
   const bucketCount = timeline.rows[0]?.buckets.length || 0;
   const compactPdfBucketLabels = bucketCount >= 32 || timeline.meta.bucketMinutes <= 15;
+  const pdfOrientation = bucketCount > 18 || timeline.meta.bucketMinutes <= 30 ? "landscape" : "portrait";
   const routinePdfWidth = Math.min(
     220,
     Math.max(140, Math.ceil(Math.max("Rotina".length, ...timeline.rows.map((row) => row.name.length)) * 7.2 + 28)),
@@ -271,7 +290,7 @@ function buildPdfHtml(input: {
           }
           .info-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 10px;
             margin-top: 14px;
           }
@@ -307,9 +326,26 @@ function buildPdfHtml(input: {
           }
           .metrics {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(${pdfOrientation === "landscape" ? 6 : 3}, 1fr);
             gap: 10px;
             margin-top: 14px;
+          }
+          .filters-bar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+          }
+          .filter-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 10px;
+            border: 1px solid #dbe2ea;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 10px;
+            font-weight: 600;
           }
           .metric-number {
             font-size: 22px;
@@ -437,7 +473,7 @@ function buildPdfHtml(input: {
           @media print {
             * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A4 ${pdfOrientation}; margin: 10mm; }
         </style>
       </head>
       <body>
@@ -460,11 +496,19 @@ function buildPdfHtml(input: {
 
           <div class="info-grid">
             <div class="info-card"><span class="label">Cliente</span><div class="value">${escapeHtml(companyLabel)}</div></div>
+            <div class="info-card"><span class="label">Host</span><div class="value">${escapeHtml(hostLabel)}</div></div>
             <div class="info-card"><span class="label">Data do relatório</span><div class="value">${escapeHtml(timeline.meta.date)}</div></div>
+            <div class="info-card"><span class="label">Escala</span><div class="value">${escapeHtml(`${timeline.meta.bucketMinutes} minutos`)}</div></div>
           </div>
 
           <div class="intro">
             Este documento consolida as execuções de backup e réplica do dia selecionado, com base no histórico do item <strong>veeam.get.metrics</strong> no Zabbix. A linha do tempo abaixo destaca visualmente os intervalos em que cada rotina esteve ativa, facilitando análise operacional, evidência de execução e compartilhamento com o cliente.
+          </div>
+
+          <div class="filters-bar">
+            <span class="filter-pill">Filtros: ${escapeHtml(filterSummary)}</span>
+            <span class="filter-pill">Orientação: ${escapeHtml(pdfOrientation === "landscape" ? "Paisagem" : "Retrato")}</span>
+            <span class="filter-pill">Buckets: ${escapeHtml(bucketCount)}</span>
           </div>
 
           <div class="metrics">
@@ -506,7 +550,7 @@ function buildPdfHtml(input: {
 
           <div class="footer">
             <span>Relatório gerado por Tech Hub</span>
-            <span>Documento em orientação horizontal para leitura operacional da timeline</span>
+            <span>Documento em orientação ${escapeHtml(pdfOrientation === "landscape" ? "horizontal" : "vertical")} para leitura operacional da timeline</span>
           </div>
         </div>
         <script>
@@ -718,6 +762,19 @@ export default function BackupReportPage() {
 
   const selectedHost = useMemo(() => hosts.find((host) => host.hostId === hostId) || null, [hosts, hostId]);
   const displayedLastClock = timeline?.host?.lastClock || selectedHost?.lastClock || 0;
+  const activeQuickFilterId = useMemo(() => {
+    return QUICK_FILTER_PRESETS.find((preset) => preset.type === typeFilter && preset.result === resultFilter)?.id || null;
+  }, [typeFilter, resultFilter]);
+  const pdfFilterSummary = useMemo(() => {
+    const typeLabel = typeFilter === "all" ? "Todos os tipos" : typeFilter;
+    const resultLabel = resultFilter === "all" ? "Todos os resultados" : getResultLabel(resultFilter);
+    return `${typeLabel} | ${resultLabel}`;
+  }, [typeFilter, resultFilter]);
+
+  function applyQuickFilter(preset: QuickFilterPreset) {
+    setTypeFilter(preset.type);
+    setResultFilter(preset.result);
+  }
 
   function handleExportCsv() {
     if (!timeline || timeline.rows.length === 0) return;
@@ -731,6 +788,8 @@ export default function BackupReportPage() {
     const html = buildPdfHtml({
       title: "Relatório de Backup Veeam",
       companyLabel: selectedCompanyLabel,
+      hostLabel: selectedHost?.name || "Host não identificado",
+      filterSummary: pdfFilterSummary,
       companyLogo: companyLogoUrl,
       timeline,
     });
@@ -876,6 +935,26 @@ export default function BackupReportPage() {
           >
             {loadingTimeline ? "Carregando..." : "Atualizar relatório"}
           </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {QUICK_FILTER_PRESETS.map((preset) => {
+            const active = activeQuickFilterId === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyQuickFilter(preset)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                  active
+                    ? "border-blue-600 bg-blue-50 text-blue-700"
+                    : "border-border bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
         </div>
       </section>
 

@@ -23,6 +23,8 @@ services:
       DATABASE_URL: postgres://techhub:techhub_password@db:5432/techhub
       JWT_SECRET: ${JWT_SECRET}
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY}
+      GLPI_OAUTH_CALLBACK_URL: ${GLPI_OAUTH_CALLBACK_URL}
+      TECH_HUB_FRONTEND_URL: ${TECH_HUB_FRONTEND_URL}
     depends_on:
       - db
     volumes:

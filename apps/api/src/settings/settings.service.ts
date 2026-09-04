@@ -174,4 +174,24 @@ export class SettingsService {
     await this.setEncryptedSetting(key, payload, updatedBy);
     return { ok: true };
   }
+
+  async getGlpiConfig(companyId: string): Promise<any | null> {
+    if (!companyId) return null;
+    const key = `GLPI_CFG_${String(companyId)}`;
+    const raw = await this.getDecryptedSetting(key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  async setGlpiConfig(companyId: string, cfg: any, updatedBy?: string) {
+    if (!companyId) throw new Error('companyId requerido');
+    const key = `GLPI_CFG_${String(companyId)}`;
+    const payload = JSON.stringify(cfg ?? {});
+    await this.setEncryptedSetting(key, payload, updatedBy);
+    return { ok: true };
+  }
 }

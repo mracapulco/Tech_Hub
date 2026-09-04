@@ -27,6 +27,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   memberships UserCompanyMembership[]
+  inventoryCampaignParticipants InventoryCampaignParticipant[]
 }
 
 model Company {
@@ -59,6 +60,21 @@ model Company {
   backupVeeamSnapshots BackupVeeamSnapshotRaw[]
   backupSummaries BackupSummaryMonthly[]
   adFsProjects AdFsProject[]
+  inventoryCampaigns InventoryCampaign[]
+  inventoryAssetIdentities InventoryAssetIdentity[]
+  inventoryAssetUsers InventoryAssetUser[]
+  inventoryAssetSnapshots InventoryAssetSnapshot[]
+  inventoryImportBatches InventoryImportBatch[]
+  inventorySuppliers InventorySupplier[]
+  inventoryDocuments InventoryEvidenceDocument[]
+  inventoryLicenseEntitlements InventoryLicenseEntitlement[]
+  inventoryIssues InventoryIssue[]
+  inventoryReconciliationResults InventoryReconciliationResult[]
+  inventoryAiSuggestions InventoryAiSuggestion[]
+  inventoryAuditEvents InventoryAuditEvent[]
+  microsoftAgreements MicrosoftAgreement[]
+  microsoftAgreementDocuments MicrosoftAgreementDocument[]
+  microsoftCustomerMaps MicrosoftDistributorCustomerMap[]
 }
 
 model UserCompanyMembership {
@@ -207,6 +223,10 @@ model Site {
   firewallLicenses FirewallLicense[]
   backupRepositories BackupRepository[]
   backupProxies BackupProxy[]
+  inventoryCampaignSites InventoryCampaignSite[]
+  inventoryAssetSnapshots InventoryAssetSnapshot[]
+  inventoryAssetUsers InventoryAssetUser[]
+  microsoftAgreements MicrosoftAgreement[]
 
   @@unique([companyId, name])
 }
@@ -543,6 +563,140 @@ enum AdFsProjectStatus {
   IMPLEMENTED
 }
 
+enum InventoryCampaignStatus {
+  PLANNING
+  COLLECTING
+  WAITING_DOCUMENTS
+  RECONCILING
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum InventorySourceType {
+  GLPI
+  SPREADSHEET
+  MANUAL
+  AI_ASSISTED
+}
+
+enum InventoryVerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  REJECTED
+}
+
+enum InventoryDocumentType {
+  INVOICE
+  CONTRACT
+  CERTIFICATE
+  PHOTO
+  SCREENSHOT
+  OTHER
+}
+
+enum InventoryDocumentVerificationStatus {
+  NOT_REVIEWED
+  VERIFIED
+  DIVERGENT
+}
+
+enum InventoryAllocationTargetType {
+  DEVICE
+  USER
+  TENANT
+  SERVER
+  OTHER
+}
+
+enum InventoryReconciliationStatus {
+  REGULAR
+  POSSIBLE_EXCESS
+  LICENSE_NOT_FOUND
+  DOCUMENT_NOT_FOUND
+  ALLOCATION_NOT_IDENTIFIED
+  EXPIRED
+  EXPIRING_SOON
+  DIVERGENT
+  NOT_APPLICABLE
+  PENDING_ANALYSIS
+}
+
+enum InventorySuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum InventoryIssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  IGNORED
+}
+
+enum MicrosoftProvider {
+  INGRAM
+  SCANSOURCE
+  MANUAL
+}
+
+enum MicrosoftConnectionStatus {
+  NOT_CONFIGURED
+  CONFIGURED
+  CONNECTED
+  ERROR
+}
+
+enum MicrosoftCustomerMapStatus {
+  SUGGESTED
+  CONFIRMED
+  IGNORED
+  MAPPED
+  UNMAPPED
+  REVIEW
+  NOT_FOUND
+}
+
+enum MicrosoftAgreementStatus {
+  ACTIVE
+  EXPIRING_90
+  EXPIRING_60
+  EXPIRING_30
+  EXPIRED
+  AUTO_RENEW
+  PENDING_MAPPING
+  PENDING_REVIEW
+  SYNC_ERROR
+  CANCELLED
+}
+
+enum MicrosoftSourceType {
+  RENEWAL
+  SUBSCRIPTION
+  INVOICE
+  ORDER
+  QUOTE
+  PRICING_AGREEMENT
+  MANUAL
+}
+
+enum MicrosoftDocumentType {
+  INVOICE
+  CONTRACT
+  PDF
+  QUOTE
+  ORDER
+  OTHER
+}
+
+enum MicrosoftSyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  ERROR
+}
+
 model AdFsProject {
   id          String             @id @default(uuid())
   company     Company            @relation(fields: [companyId], references: [id])
@@ -718,4 +872,674 @@ model AdFsGpoPlan {
 
   @@index([projectId])
   @@index([ouNodeId])
+}
+
+model InventoryCampaign {
+  id                    String                  @id @default(uuid())
+  company               Company                 @relation(fields: [companyId], references: [id])
+  companyId             String
+  name                  String
+  objective             String?
+  scopeSummary          String?
+  openedAt              DateTime                @default(now())
+  collectedAt           DateTime?
+  closedAt              DateTime?
+  status                InventoryCampaignStatus @default(PLANNING)
+  sourcesUsed           Json?
+  notes                 String?
+  reviewResult          Json?
+  compareWithCampaign   InventoryCampaign?      @relation("InventoryCampaignComparison", fields: [compareWithCampaignId], references: [id])
+  compareWithCampaignId String?
+  comparedByCampaigns   InventoryCampaign[]     @relation("InventoryCampaignComparison")
+  createdById           String?
+  updatedById           String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  sites                 InventoryCampaignSite[]
+  participants          InventoryCampaignParticipant[]
+  importBatches         InventoryImportBatch[]
+  assetSnapshots        InventoryAssetSnapshot[]
+  documents             InventoryEvidenceDocument[]
+  licenseEntitlements   InventoryLicenseEntitlement[]
+  issues                InventoryIssue[]
+  reconciliationResults InventoryReconciliationResult[]
+  aiSuggestions         InventoryAiSuggestion[]
+  auditEvents           InventoryAuditEvent[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([openedAt])
+  @@index([compareWithCampaignId])
+}
+
+model InventoryCampaignSite {
+  id         String            @id @default(uuid())
+  campaign   InventoryCampaign @relation(fields: [campaignId], references: [id])
+  campaignId String
+  site       Site              @relation(fields: [siteId], references: [id])
+  siteId     String
+  createdAt  DateTime          @default(now())
+
+  @@unique([campaignId, siteId])
+  @@index([campaignId])
+  @@index([siteId])
+}
+
+model InventoryCampaignParticipant {
+  id         String            @id @default(uuid())
+  campaign   InventoryCampaign @relation(fields: [campaignId], references: [id])
+  campaignId String
+  user       User              @relation(fields: [userId], references: [id])
+  userId     String
+  roleLabel  String?
+  createdAt  DateTime          @default(now())
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+  @@index([userId])
+}
+
+model InventoryImportBatch {
+  id               String              @id @default(uuid())
+  company          Company             @relation(fields: [companyId], references: [id])
+  companyId        String
+  campaign         InventoryCampaign   @relation(fields: [campaignId], references: [id])
+  campaignId       String
+  sourceType       InventorySourceType
+  fileName         String?
+  fileUrl          String?
+  externalSourceId String?
+  summary          Json?
+  columnMapping    Json?
+  importedAt       DateTime            @default(now())
+  createdById      String?
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([sourceType])
+}
+
+model InventoryAssetUser {
+  id                 String                   @id @default(uuid())
+  company            Company                  @relation(fields: [companyId], references: [id])
+  companyId          String
+  site               Site?                    @relation(fields: [siteId], references: [id])
+  siteId             String?
+  displayName        String
+  email              String?
+  department         String?
+  employeeCode       String?
+  externalSourceId   String?
+  sourceType         InventorySourceType?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  assetSnapshots     InventoryAssetSnapshot[]
+  licenseAllocations InventoryLicenseAllocation[]
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([displayName])
+}
+
+model InventoryAssetIdentity {
+  id               String                @id @default(uuid())
+  company          Company               @relation(fields: [companyId], references: [id])
+  companyId        String
+  displayName      String
+  hostname         String?
+  serialNumber     String?
+  assetTag         String?
+  manufacturer     String?
+  model            String?
+  externalSourceId String?
+  lastSeenSource   InventorySourceType?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  snapshots        InventoryAssetSnapshot[]
+
+  @@index([companyId])
+  @@index([hostname])
+  @@index([serialNumber])
+  @@index([assetTag])
+}
+
+model InventoryAssetSnapshot {
+  id                     String                      @id @default(uuid())
+  company                Company                     @relation(fields: [companyId], references: [id])
+  companyId              String
+  campaign               InventoryCampaign           @relation(fields: [campaignId], references: [id])
+  campaignId             String
+  assetIdentity          InventoryAssetIdentity      @relation(fields: [assetIdentityId], references: [id])
+  assetIdentityId        String
+  site                   Site?                       @relation(fields: [siteId], references: [id])
+  siteId                 String?
+  assignedUser           InventoryAssetUser?         @relation(fields: [assignedUserId], references: [id])
+  assignedUserId         String?
+  sourceType             InventorySourceType?
+  verificationStatus     InventoryVerificationStatus @default(UNVERIFIED)
+  displayName            String
+  hostname               String?
+  serialNumber           String?
+  assetTag               String?
+  manufacturer           String?
+  model                  String?
+  operatingSystem        String?
+  operatingSystemVersion String?
+  sourceExternalId       String?
+  collectedAt            DateTime?
+  notes                  String?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+
+  hardware               InventoryHardwareSnapshot?
+  softwareInstallations  InventorySoftwareInstallation[]
+  licenseAllocations     InventoryLicenseAllocation[]
+  issueLinks             InventoryIssue[]
+  reconciliationResults  InventoryReconciliationResult[]
+
+  @@unique([campaignId, assetIdentityId])
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([siteId])
+  @@index([assignedUserId])
+}
+
+model InventoryHardwareSnapshot {
+  id                String                 @id @default(uuid())
+  assetSnapshot     InventoryAssetSnapshot @relation(fields: [assetSnapshotId], references: [id])
+  assetSnapshotId   String                 @unique
+  cpu               String?
+  memoryGB          Float?
+  storageSummary    String?
+  biosSerial        String?
+  motherboardSerial String?
+  osArchitecture    String?
+  extraData         Json?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}
+
+model SoftwareVendor {
+  id        String            @id @default(uuid())
+  name      String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  products  SoftwareProduct[]
+}
+
+model SoftwareProduct {
+  id                  String                        @id @default(uuid())
+  vendor              SoftwareVendor?              @relation(fields: [vendorId], references: [id])
+  vendorId            String?
+  name                String
+  productFamily       String?
+  defaultLicenseNotes String?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  aliases             SoftwareAlias[]
+  installations       InventorySoftwareInstallation[]
+  licenseEntitlements InventoryLicenseEntitlement[]
+
+  @@index([vendorId])
+  @@unique([vendorId, name])
+}
+
+model SoftwareAlias {
+  id        String          @id @default(uuid())
+  product   SoftwareProduct @relation(fields: [productId], references: [id])
+  productId String
+  rawName   String          @unique
+  createdAt DateTime        @default(now())
+
+  @@index([productId])
+}
+
+model InventorySoftwareInstallation {
+  id                 String                      @id @default(uuid())
+  assetSnapshot      InventoryAssetSnapshot      @relation(fields: [assetSnapshotId], references: [id])
+  assetSnapshotId    String
+  product            SoftwareProduct?            @relation(fields: [productId], references: [id])
+  productId          String?
+  rawVendorName      String?
+  rawProductName     String
+  edition            String?
+  version            String?
+  installPath        String?
+  installationDate   DateTime?
+  sourceType         InventorySourceType?
+  verificationStatus InventoryVerificationStatus @default(UNVERIFIED)
+  notes              String?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  reconciliationResults InventoryReconciliationResult[]
+
+  @@index([assetSnapshotId])
+  @@index([productId])
+}
+
+model InventorySupplier {
+  id                 String                     @id @default(uuid())
+  company            Company                    @relation(fields: [companyId], references: [id])
+  companyId          String
+  name               String
+  documentNumber     String?
+  email              String?
+  phone              String?
+  notes              String?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  documents          InventoryEvidenceDocument[]
+  licenseEntitlements InventoryLicenseEntitlement[]
+
+  @@index([companyId])
+  @@unique([companyId, name])
+}
+
+model InventoryEvidenceDocument {
+  id                 String                              @id @default(uuid())
+  company            Company                             @relation(fields: [companyId], references: [id])
+  companyId          String
+  campaign           InventoryCampaign                   @relation(fields: [campaignId], references: [id])
+  campaignId         String
+  supplier           InventorySupplier?                  @relation(fields: [supplierId], references: [id])
+  supplierId         String?
+  documentType       InventoryDocumentType
+  verificationStatus InventoryDocumentVerificationStatus @default(NOT_REVIEWED)
+  title              String
+  documentNumber     String?
+  fileUrl            String?
+  issuedAt           DateTime?
+  expiresAt          DateTime?
+  notes              String?
+  sourceType         InventorySourceType?
+  createdById        String?
+  createdAt          DateTime                            @default(now())
+  updatedAt          DateTime                            @updatedAt
+
+  entitlementDocuments InventoryEntitlementDocument[]
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([supplierId])
+}
+
+model InventoryLicenseEntitlement {
+  id                     String                      @id @default(uuid())
+  company                Company                     @relation(fields: [companyId], references: [id])
+  companyId              String
+  campaign               InventoryCampaign           @relation(fields: [campaignId], references: [id])
+  campaignId             String
+  product                SoftwareProduct?            @relation(fields: [productId], references: [id])
+  productId              String?
+  supplier               InventorySupplier?          @relation(fields: [supplierId], references: [id])
+  supplierId             String?
+  rawProductName         String
+  edition                String?
+  version                String?
+  licenseType            String?
+  licenseChannel         String?
+  allocationMetric       String?
+  activationMethod       String?
+  activationAccountLabel String?
+  tenantReference        String?
+  serverReference        String?
+  keyMasked              String?
+  keyEnc                 String?
+  quantityPurchased      Float?
+  quantityInUse          Float?
+  purchaseDate           DateTime?
+  startDate              DateTime?
+  expiresAt              DateTime?
+  proofStatus            InventoryVerificationStatus @default(UNVERIFIED)
+  notes                  String?
+  sourceType             InventorySourceType?
+  createdById            String?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+
+  allocations            InventoryLicenseAllocation[]
+  entitlementDocuments   InventoryEntitlementDocument[]
+  reconciliationResults  InventoryReconciliationResult[]
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([productId])
+  @@index([supplierId])
+}
+
+model InventoryEntitlementDocument {
+  id            String                     @id @default(uuid())
+  entitlement   InventoryLicenseEntitlement @relation(fields: [entitlementId], references: [id])
+  entitlementId String
+  document      InventoryEvidenceDocument   @relation(fields: [documentId], references: [id])
+  documentId    String
+  createdAt     DateTime                   @default(now())
+
+  @@unique([entitlementId, documentId])
+  @@index([entitlementId])
+  @@index([documentId])
+}
+
+model InventoryLicenseAllocation {
+  id                String                        @id @default(uuid())
+  entitlement       InventoryLicenseEntitlement   @relation(fields: [entitlementId], references: [id])
+  entitlementId     String
+  targetType        InventoryAllocationTargetType
+  assetSnapshot     InventoryAssetSnapshot?       @relation(fields: [assetSnapshotId], references: [id])
+  assetSnapshotId   String?
+  assetUser         InventoryAssetUser?           @relation(fields: [assetUserId], references: [id])
+  assetUserId       String?
+  tenantReference   String?
+  serverReference   String?
+  quantityAllocated Float?
+  notes             String?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  @@index([entitlementId])
+  @@index([assetSnapshotId])
+  @@index([assetUserId])
+}
+
+model InventoryIssue {
+  id              String               @id @default(uuid())
+  company         Company              @relation(fields: [companyId], references: [id])
+  companyId       String
+  campaign        InventoryCampaign    @relation(fields: [campaignId], references: [id])
+  campaignId      String
+  assetSnapshot   InventoryAssetSnapshot? @relation(fields: [assetSnapshotId], references: [id])
+  assetSnapshotId String?
+  issueType       String
+  severity        String?
+  status          InventoryIssueStatus @default(OPEN)
+  title           String
+  description     String?
+  createdById     String?
+  resolvedById    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([assetSnapshotId])
+  @@index([status])
+}
+
+model InventoryReconciliationResult {
+  id                     String                         @id @default(uuid())
+  company                Company                        @relation(fields: [companyId], references: [id])
+  companyId              String
+  campaign               InventoryCampaign              @relation(fields: [campaignId], references: [id])
+  campaignId             String
+  softwareInstallation   InventorySoftwareInstallation? @relation(fields: [softwareInstallationId], references: [id])
+  softwareInstallationId String?
+  assetSnapshot          InventoryAssetSnapshot?        @relation(fields: [assetSnapshotId], references: [id])
+  assetSnapshotId        String?
+  entitlement            InventoryLicenseEntitlement?   @relation(fields: [entitlementId], references: [id])
+  entitlementId          String?
+  status                 InventoryReconciliationStatus  @default(PENDING_ANALYSIS)
+  ruleCode               String?
+  confidence             Float?
+  summary                String?
+  details                Json?
+  reviewedById           String?
+  reviewedAt             DateTime?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([softwareInstallationId])
+  @@index([assetSnapshotId])
+  @@index([entitlementId])
+  @@index([status])
+}
+
+model InventoryAiSuggestion {
+  id                String                    @id @default(uuid())
+  company           Company                   @relation(fields: [companyId], references: [id])
+  companyId         String
+  campaign          InventoryCampaign         @relation(fields: [campaignId], references: [id])
+  campaignId        String
+  suggestionType    String
+  targetEntity      String
+  targetEntityId    String?
+  status            InventorySuggestionStatus @default(PENDING)
+  confidence        Float?
+  rationale         String?
+  suggestionPayload Json?
+  decidedById       String?
+  decidedAt         DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([status])
+}
+
+model InventoryAuditEvent {
+  id            String             @id @default(uuid())
+  company       Company            @relation(fields: [companyId], references: [id])
+  companyId     String
+  campaign      InventoryCampaign? @relation(fields: [campaignId], references: [id])
+  campaignId    String?
+  entityType    String
+  entityId      String?
+  action        String
+  beforeData    Json?
+  afterData     Json?
+  metadata      Json?
+  performedById String?
+  createdAt     DateTime           @default(now())
+
+  @@index([companyId])
+  @@index([campaignId])
+  @@index([entityType])
+  @@index([action])
+}
+
+model MicrosoftDistributorConnection {
+  id              String                    @id @default(uuid())
+  provider        MicrosoftProvider         @unique
+  environment     String                    @default("production")
+  apiBaseUrl      String?
+  subscriptionKeyEnc String?
+  apiUser         String?
+  apiPassEnc      String?
+  marketplace     String?
+  clientId        String?
+  clientSecretEnc String?
+  customerNumber  String?
+  countryCode     String?
+  senderId        String?
+  apiKeyEnc       String?
+  status          MicrosoftConnectionStatus @default(NOT_CONFIGURED)
+  lastTestAt      DateTime?
+  lastSyncAt      DateTime?
+  lastError       String?
+  autoSyncEnabled       Boolean             @default(false)
+  autoSyncIntervalHours Int?
+  nextSyncAt            DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  syncRuns        MicrosoftSyncRun[]
+
+  @@index([status])
+  @@index([autoSyncEnabled, nextSyncAt])
+}
+
+model MicrosoftDistributorCustomerMap {
+  id                   String                     @id @default(uuid())
+  provider             MicrosoftProvider
+  externalCustomerId   String
+  externalCustomerName String
+  externalStatus       String?
+  externalTaxId        String?
+  externalTenantId     String?
+  externalTenantDomain String?
+  company              Company?                   @relation(fields: [companyId], references: [id])
+  companyId            String?
+  matchStatus          MicrosoftCustomerMapStatus @default(SUGGESTED)
+  confidence           Float?
+  notes                String?
+  firstSeenAt          DateTime                   @default(now())
+  lastSeenAt           DateTime?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  @@unique([provider, externalCustomerId])
+  @@index([companyId])
+  @@index([matchStatus])
+  @@index([externalTaxId])
+}
+
+model MicrosoftAgreement {
+  id                String                   @id @default(uuid())
+  company           Company?                 @relation(fields: [companyId], references: [id])
+  companyId         String?
+  site              Site?                    @relation(fields: [siteId], references: [id])
+  siteId            String?
+  sourceProvider    MicrosoftProvider?
+  externalCustomerId String?
+  externalCustomerName String?
+  externalSubscriptionId String?
+  vendorSubscriptionId String?
+  productId         String?
+  mpn               String?
+  microsoftCustomerId String?
+  microsoftTenantId String?
+  microsoftDomain   String?
+  providerStatus    String?
+  renewalStatus     Boolean?
+  isRecurring       Boolean                  @default(false)
+  isReadOnly        Boolean                  @default(false)
+  category          String
+  productName       String
+  sku               String?
+  licenseType       String?
+  licenseChannel    String?
+  billingModel      String?
+  subscriptionPeriod String?
+  tenantName        String?
+  tenantDomain      String?
+  quantityPurchased Float?
+  quantityActive    Float?
+  unitPrice         Decimal?                 @db.Decimal(18, 2)
+  unitCost          Decimal?                 @db.Decimal(18, 2)
+  totalPrice        Decimal?                 @db.Decimal(18, 2)
+  totalCost         Decimal?                 @db.Decimal(18, 2)
+  currency          String?
+  purchaseDate      DateTime?
+  startDate         DateTime?
+  renewalDate       DateTime?
+  expiresAt         DateTime?
+  autoRenew         Boolean                  @default(false)
+  alertLeadDays     Int                      @default(30)
+  status            MicrosoftAgreementStatus @default(PENDING_REVIEW)
+  notes             String?
+  createdById       String?
+  updatedById       String?
+  lastSeenAt        DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  sources           MicrosoftAgreementSource[]
+  documents         MicrosoftAgreementDocument[]
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([sourceProvider])
+  @@index([externalCustomerId])
+  @@index([externalSubscriptionId])
+  @@index([providerStatus])
+  @@index([isRecurring])
+  @@index([status])
+  @@index([renewalDate])
+  @@index([expiresAt])
+  @@index([tenantDomain])
+  @@unique([sourceProvider, externalSubscriptionId])
+}
+
+model MicrosoftAgreementSource {
+  id                   String              @id @default(uuid())
+  agreement            MicrosoftAgreement  @relation(fields: [agreementId], references: [id])
+  agreementId          String
+  provider             MicrosoftProvider
+  sourceType           MicrosoftSourceType
+  externalCustomerId   String?
+  externalCustomerName String?
+  externalRecordId     String?
+  externalReference    String?
+  payloadSummary       Json?
+  observedAt           DateTime            @default(now())
+  confidence           Float?
+  fieldCoverage        Json?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([agreementId])
+  @@index([provider])
+  @@index([sourceType])
+  @@index([externalCustomerId])
+}
+
+model MicrosoftAgreementDocument {
+  id             String                @id @default(uuid())
+  agreement      MicrosoftAgreement    @relation(fields: [agreementId], references: [id])
+  agreementId    String
+  company        Company               @relation(fields: [companyId], references: [id])
+  companyId      String
+  provider       MicrosoftProvider?
+  documentType   MicrosoftDocumentType
+  title          String
+  documentNumber String?
+  fileUrl        String?
+  issuedAt       DateTime?
+  amount         Decimal?              @db.Decimal(18, 2)
+  currency       String?
+  notes          String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([agreementId])
+  @@index([companyId])
+  @@index([provider])
+  @@index([documentType])
+}
+
+model MicrosoftSyncRun {
+  id             String                        @id @default(uuid())
+  provider       MicrosoftProvider
+  connection     MicrosoftDistributorConnection? @relation(fields: [connectionId], references: [id])
+  connectionId   String?
+  status         MicrosoftSyncStatus
+  startedAt      DateTime                      @default(now())
+  finishedAt     DateTime?
+  customersProcessed Int                        @default(0)
+  subscriptionsFound Int                        @default(0)
+  activeSubscriptions Int                       @default(0)
+  recordsRead    Int                           @default(0)
+  recordsCreated Int                           @default(0)
+  recordsUpdated Int                           @default(0)
+  recordsIgnored Int                           @default(0)
+  markedNotFound Int                           @default(0)
+  errorCount     Int                           @default(0)
+  durationMs     Int?
+  errorSummary   String?
+  createdAt      DateTime                      @default(now())
+
+  @@index([provider])
+  @@index([connectionId])
+  @@index([status])
+  @@index([startedAt])
 }

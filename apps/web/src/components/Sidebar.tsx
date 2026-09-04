@@ -1,16 +1,31 @@
 "use client";
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clearAuth, getUser, getToken } from '@/lib/auth';
 import { apiGet } from '@/lib/api';
 import Image from 'next/image';
 
+type SidebarSection = 'gestao' | 'seguranca' | 'configuracoes' | null;
+type GestaoSubmenu = 'licenciamento' | null;
+
 export default function Sidebar() {
   const router = useRouter();
+  const pathname = usePathname();
   const user = typeof window !== 'undefined' ? getUser() : null;
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [openSection, setOpenSection] = useState<SidebarSection>(null);
+  const [openGestaoSubmenu, setOpenGestaoSubmenu] = useState<GestaoSubmenu>(null);
+
+  const getSectionFromPath = (path: string): SidebarSection => {
+    if (path.startsWith('/gestao') || path.startsWith('/ipam') || path.startsWith('/licenciamento')) {
+      return 'gestao';
+    }
+    if (path.startsWith('/seguranca')) return 'seguranca';
+    if (path.startsWith('/configuracoes')) return 'configuracoes';
+    return null;
+  };
 
   useEffect(() => {
     try {
@@ -36,6 +51,11 @@ export default function Sidebar() {
     })();
   }, [user?.id]);
 
+  useEffect(() => {
+    setOpenSection(getSectionFromPath(pathname));
+    setOpenGestaoSubmenu(pathname.startsWith('/licenciamento') ? 'licenciamento' : null);
+  }, [pathname]);
+
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       try {
@@ -48,6 +68,14 @@ export default function Sidebar() {
   const onLogout = () => {
     clearAuth();
     router.push('/login');
+  };
+
+  const toggleSection = (section: Exclude<SidebarSection, null>) => {
+    setOpenSection((current) => (current === section ? null : section));
+  };
+
+  const toggleGestaoSubmenu = (submenu: Exclude<GestaoSubmenu, null>) => {
+    setOpenGestaoSubmenu((current) => (current === submenu ? null : submenu));
   };
 
   return (
@@ -77,8 +105,14 @@ export default function Sidebar() {
         </Link>
 
         {!collapsed ? (
-          <details>
-            <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10">
+          <details open={openSection === 'gestao'}>
+            <summary
+              className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10"
+              onClick={(event) => {
+                event.preventDefault();
+                toggleSection('gestao');
+              }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
                 <circle cx="12" cy="12" r="9" strokeWidth="2" />
               </svg>
@@ -118,8 +152,14 @@ export default function Sidebar() {
                 </svg>
                 <span>AD / File Server</span>
               </Link>
-              <details open>
-                <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10">
+              <details open={openGestaoSubmenu === 'licenciamento'}>
+                <summary
+                  className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    toggleGestaoSubmenu('licenciamento');
+                  }}
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
                     <path d="M4 4h16v6H4zM4 12h10v8H4z" strokeWidth="2" strokeLinejoin="round" />
                   </svg>
@@ -182,6 +222,12 @@ export default function Sidebar() {
                 </svg>
                 <span>VLANs</span>
               </Link>
+              <Link href="/gestao/backup" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Backup">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>Backup</span>
+              </Link>
               <Link href="/gestao/adfs" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="AD / File Server">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
                   <path d="M4 4h16v6H4zM4 12h16v8H4z" strokeWidth="2" strokeLinejoin="round" />
@@ -213,8 +259,14 @@ export default function Sidebar() {
 
         {/* Segurança → Maturidade / Vulnerabilidades */}
         {!collapsed ? (
-          <details>
-            <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10">
+          <details open={openSection === 'seguranca'}>
+            <summary
+              className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10"
+              onClick={(event) => {
+                event.preventDefault();
+                toggleSection('seguranca');
+              }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
                 <path d="M12 2l9 4-9 4-9-4 9-4zm0 8l9-4v8l-9 4-9-4V6l9 4z" strokeWidth="2" strokeLinejoin="round" />
               </svg>
@@ -269,8 +321,14 @@ export default function Sidebar() {
 
         {/* Configurações — manter sempre abaixo dos outros itens */}
         {!collapsed ? (
-          <details>
-            <summary className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-sidebarHover">
+          <details open={openSection === 'configuracoes'}>
+            <summary
+              className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-sidebarHover"
+              onClick={(event) => {
+                event.preventDefault();
+                toggleSection('configuracoes');
+              }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5">
                 <path d="M12 3l2 4 4 .5-3 3 .7 4.5-3.7-2-3.7 2 .7-4.5-3-3 4-.5 2-4z" strokeWidth="2" strokeLinejoin="round" />
               </svg>
