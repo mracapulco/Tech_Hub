@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { getRequestContext } from '../common/auth-context';
 
 type CompanyDto = {
   cnpj?: string;
@@ -24,13 +25,6 @@ type CompanyDto = {
   logoUrl?: string;
 };
 
-function getTokenFromHeader(auth?: string): string | null {
-  if (!auth) return null;
-  const parts = auth.split(' ');
-  if (parts.length === 2 && parts[0] === 'Bearer') return parts[1];
-  return null;
-}
-
 function onlyDigits(value: string): string {
   return (value || '').replace(/\D+/g, '');
 }
@@ -39,37 +33,21 @@ function onlyDigits(value: string): string {
 export class CompaniesController {
   constructor(private prisma: PrismaService, private jwt: JwtService) {}
 
+  private async getCtx(authorization?: string) {
+    return getRequestContext(this.jwt, this.prisma, authorization);
+  }
+
   @Get()
   async list(@Headers('authorization') authorization?: string) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    let items: any[] = [];
-    try {
-      // Verifica e obtém payload para identificar o usuário
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      // Descobre os vínculos do usuário e se ele é ADMIN
-      const memberships = await this.prisma.userCompanyMembership.findMany({
-        where: { userId },
-        select: { companyId: true, role: true },
-      });
-      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-      const username = String(payload?.username || '').toLowerCase();
-      const isGlobalAdmin = globalAdmins.includes(username);
-      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
-      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      // Lista empresas conforme permissões: ADMIN vê todas, demais apenas seus vínculos
-      items = (isAdmin || isTechnician)
-        ? await this.prisma.company.findMany({ orderBy: { name: 'asc' } })
-        : await this.prisma.company.findMany({
-            where: { id: { in: allowedCompanyIds } },
-            orderBy: { name: 'asc' },
-          });
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
+    // Lista empresas conforme permissões: ADMIN/TECHNICIAN veem todas, demais apenas seus vínculos
+    const items = (ctx.isAdmin || ctx.isTechnician)
+      ? await this.prisma.company.findMany({ orderBy: { name: 'asc' } })
+      : await this.prisma.company.findMany({
+          where: { id: { in: ctx.allowedCompanyIds } },
+          orderBy: { name: 'asc' },
+        });
     // Agregar contagem de usuários vinculados por empresa
     const ids = items.map((i) => i.id);
     let countsMap = new Map<string, number>();
@@ -99,18 +77,9 @@ export class CompaniesController {
     @Body() body: CompanyDto,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-      if (!isAdmin) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
 
     const data = {
       cnpj: body.cnpj ? onlyDigits(body.cnpj) : null,
@@ -148,26 +117,12 @@ export class CompaniesController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    let userId: string | null = null;
-    try {
-      const payload: any = this.jwt.verify(token);
-      userId = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
-    // Verifica acesso: ADMIN ou vínculo à empresa
-    const memberships = await this.prisma.userCompanyMembership.findMany({
-      where: { userId },
-      select: { companyId: true, role: true },
-    });
-    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-    const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-    const hasAccess = isAdmin || isTechnician || memberships.some((m: any) => m.companyId === id);
+    // Verifica acesso: ADMIN/TECHNICIAN ou vínculo à empresa
+    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(id);
     if (!hasAccess) return { ok: false, error: 'Forbidden' };
     return { ok: true, data: company };
   }
@@ -177,23 +132,12 @@ export class CompaniesController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    let userId: string | null = null;
-    try {
-      const payload: any = this.jwt.verify(token);
-      userId = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
-    // Permite ADMIN ou usuário com vínculo à empresa
-    const membershipsUser = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
-    const isAdmin = membershipsUser.some((m: any) => m.role === 'ADMIN');
-    const isTechnician = membershipsUser.some((m: any) => m.role === 'TECHNICIAN');
-    const hasAccess = isAdmin || isTechnician || membershipsUser.some((m: any) => m.companyId === id);
+    // Permite ADMIN/TECHNICIAN ou usuário com vínculo à empresa
+    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(id);
     if (!hasAccess) return { ok: false, error: 'Forbidden' };
     const memberships = await this.prisma.userCompanyMembership.findMany({
       where: { companyId: id },
@@ -218,20 +162,10 @@ export class CompaniesController {
     @Body() body: CompanyDto,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true, companyId: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-      const hasAccess = isAdmin || isTechnician || memberships.some((m: any) => m.companyId === id);
-      if (!hasAccess) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
+    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(id);
+    if (!hasAccess) return { ok: false, error: 'Forbidden' };
     const data = {
       cnpj: body.cnpj ? onlyDigits(body.cnpj) : null,
       name: body.name?.trim(),
@@ -262,18 +196,9 @@ export class CompaniesController {
     @Query('force') force?: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-      if (!isAdmin) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
     const memberships = await this.prisma.userCompanyMembership.findMany({ where: { companyId: id }, select: { id: true, userId: true, role: true } });
@@ -308,18 +233,9 @@ export class CompaniesController {
     @Param('cnpj') cnpj: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-      if (!isAdmin) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return ctx;
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
 
     const digits = onlyDigits(cnpj);
     if (!digits || digits.length !== 14) {

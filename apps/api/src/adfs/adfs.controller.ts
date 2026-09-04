@@ -2,34 +2,14 @@ import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from 
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { AdfsService } from './adfs.service';
+import { getRequestContext } from '../common/auth-context';
 
 @Controller('adfs')
 export class AdfsController {
   constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService, private readonly svc: AdfsService) {}
 
-  private getTokenFromHeader(auth?: string): string | null {
-    if (!auth) return null;
-    const parts = auth.split(' ');
-    if (parts.length === 2 && parts[0] === 'Bearer') return parts[1];
-    return null;
-  }
-
   private async getContext(authorization?: string) {
-    const token = this.getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' } as const;
-    try {
-      const payload: any = this.jwt.verify(token, { secret: process.env.JWT_SECRET || 'dev-secret' });
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' } as const;
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
-      const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-      const isClient = memberships.some((m: any) => m.role === 'CLIENT');
-      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      return { ok: true, isAdmin, isTechnician, isClient, allowedCompanyIds } as const;
-    } catch {
-      return { ok: false, error: 'Invalid token' } as const;
-    }
+    return getRequestContext(this.jwt, this.prisma, authorization);
   }
 
   private async canAccessProject(projectId: string, ctx: { isAdmin: boolean; isTechnician: boolean; allowedCompanyIds: string[] }) {

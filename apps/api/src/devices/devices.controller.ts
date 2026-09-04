@@ -1,13 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, Put, Query, Delete } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
-
-function getTokenFromHeader(authorization?: string) {
-  if (!authorization) return null;
-  const parts = authorization.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
-  return parts[1];
-}
+import { getRequestContext } from '../common/auth-context';
 
 type DeviceDto = {
   deviceTypeId: string;
@@ -31,21 +25,18 @@ type DeviceDto = {
 export class DevicesController {
   constructor(private prisma: PrismaService, private jwt: JwtService) {}
 
+  private async getCtx(authorization?: string) {
+    return getRequestContext(this.jwt, this.prisma, authorization);
+  }
+
   @Get()
   async list(
     @Query('deviceTypeId') deviceTypeId?: string,
     @Query('brandId') brandId?: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
     const where: any = {};
     if (deviceTypeId) where.deviceTypeId = deviceTypeId;
     if (brandId) where.brandId = brandId;
@@ -62,16 +53,9 @@ export class DevicesController {
 
   @Get(':id')
   async detail(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
-    const item = await this.prisma.device.findUnique({ 
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    const item = await this.prisma.device.findUnique({
       where: { id },
       include: {
         deviceType: true,
@@ -84,21 +68,9 @@ export class DevicesController {
 
   @Post()
   async create(@Body() body: DeviceDto, @Headers('authorization') authorization?: string) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-      const username = String(payload?.username || '').toLowerCase();
-      const isGlobalAdmin = globalAdmins.includes(username);
-      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
-      if (!isAdmin) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
     const data = {
       deviceTypeId: body.deviceTypeId?.trim(),
       brandId: body.brandId?.trim(),
@@ -130,21 +102,9 @@ export class DevicesController {
 
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: DeviceDto, @Headers('authorization') authorization?: string) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-      const username = String(payload?.username || '').toLowerCase();
-      const isGlobalAdmin = globalAdmins.includes(username);
-      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
-      if (!isAdmin) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
     const data: any = {};
     if (typeof body.deviceTypeId === 'string') data.deviceTypeId = body.deviceTypeId.trim();
     if (typeof body.brandId === 'string') data.brandId = body.brandId.trim();
@@ -172,21 +132,9 @@ export class DevicesController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' };
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' };
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { role: true } });
-      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-      const username = String(payload?.username || '').toLowerCase();
-      const isGlobalAdmin = globalAdmins.includes(username);
-      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
-      if (!isAdmin) return { ok: false, error: 'Forbidden' };
-    } catch (e) {
-      return { ok: false, error: 'Invalid token' };
-    }
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
     const existing = await this.prisma.device.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: 'Dispositivo não encontrado.' };
     try {

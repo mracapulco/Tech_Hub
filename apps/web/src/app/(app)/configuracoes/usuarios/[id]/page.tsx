@@ -28,7 +28,7 @@ export default function UsuarioDetailPage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [form, setForm] = useState({ name: '', lastName: '', email: '', username: '', password: '', avatarUrl: '' });
+  const [form, setForm] = useState({ name: '', lastName: '', email: '', username: '', password: '', avatarUrl: '', status: 'ACTIVE' });
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [linkCompanyId, setLinkCompanyId] = useState<string>('');
@@ -54,6 +54,7 @@ export default function UsuarioDetailPage() {
           username: res.data.username || '',
           password: '',
           avatarUrl: (res.data.avatarUrl as any) || '',
+          status: res.data.status || 'ACTIVE',
         });
       }
     } catch {
@@ -110,6 +111,7 @@ export default function UsuarioDetailPage() {
     };
     if (form.avatarUrl.trim()) payload.avatarUrl = form.avatarUrl.trim();
     if (form.password.trim()) payload.password = form.password;
+    if (isAdmin) payload.status = form.status;
     try {
       const res = await apiPut<{ ok: boolean; data?: UserDetail; error?: string }>(`/users/${id}`, token, payload);
       if (!res?.ok) {
@@ -218,7 +220,7 @@ export default function UsuarioDetailPage() {
           <p><strong>Sobrenome:</strong> {user.lastName || '-'}</p>
           <p><strong>Email:</strong> {user.email}</p>
           <p><strong>Username:</strong> {user.username || '-'}</p>
-          <p><strong>Status:</strong> {user.status || '-'}</p>
+          <p><strong>Status:</strong> {user.status === 'INACTIVE' ? 'Inativo' : user.status === 'ACTIVE' ? 'Ativo' : (user.status || '-')}</p>
           <div className="mt-4">
             {user.memberships && user.memberships.length > 0 ? (
               <div>
@@ -331,6 +333,16 @@ export default function UsuarioDetailPage() {
             <label className="block text-sm font-medium">Senha (para alterar)</label>
             <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary" />
           </div>
+          {isAdmin && (
+            <div>
+              <label className="block text-sm font-medium">Status da conta</label>
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary">
+                <option value="ACTIVE">Ativo</option>
+                <option value="INACTIVE">Inativo</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">Uma conta inativa não consegue fazer login. Use para reativar contas de manutenção (ex.: admin master) e defina uma nova senha ao ativar.</p>
+            </div>
+          )}
           <div className="pt-2 flex gap-2">
             <button type="submit" disabled={saving} className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700 disabled:opacity-60">
               {saving ? 'Salvando...' : 'Salvar Alterações'}

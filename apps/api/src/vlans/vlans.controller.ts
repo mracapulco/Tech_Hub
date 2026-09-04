@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Query, Headers, Delete, Param, Put } from 
 import { VlansService } from './vlans.service';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { getRequestContext } from '../common/auth-context';
 
 class CreateVlanDto {
   siteId!: string;
@@ -14,31 +15,8 @@ class CreateVlanDto {
 export class VlansController {
   constructor(private readonly service: VlansService, private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
-  private getTokenFromHeader(auth?: string): string | null {
-    if (!auth) return null;
-    const parts = auth.split(' ');
-    if (parts.length === 2 && parts[0] === 'Bearer') return parts[1];
-    return null;
-  }
-
   private async getUserContext(authorization?: string) {
-    const token = this.getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' } as const;
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' } as const;
-      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-      const username = String(payload?.username || '').toLowerCase();
-      const isGlobalAdmin = globalAdmins.includes(username);
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
-      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
-      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      return { ok: true, userId, isAdmin, isTechnician, allowedCompanyIds } as const;
-    } catch {
-      return { ok: false, error: 'Invalid token' } as const;
-    }
+    return getRequestContext(this.jwt, this.prisma, authorization);
   }
 
   @Get()

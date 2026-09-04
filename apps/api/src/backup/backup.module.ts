@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
 import { BackupController } from './backup.controller';
 import { BackupService } from './backup.service';
@@ -8,16 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ZabbixModule } from '../integrations/zabbix/zabbix.module';
 
 @Module({
-  imports: [
-    JwtModule.register({
-      global: false,
-      secret: process.env.JWT_SECRET || 'dev-secret',
-      signOptions: { expiresIn: '7d' },
-    }),
-    SettingsModule,
-    AuthModule,
-    ZabbixModule,
-  ],
+  imports: [SettingsModule, AuthModule, ZabbixModule],
   controllers: [BackupController],
   providers: [PrismaService, BackupService],
 })

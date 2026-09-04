@@ -22,6 +22,10 @@ export class AuthService {
       return { ok: false, message: 'Credenciais inválidas' };
     }
 
+    if (String((user as any).status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+      return { ok: false, message: 'Usuário inativo. Contate um administrador.' };
+    }
+
     const token = await this.jwt.signAsync({ sub: user.id, username: user.username });
     return {
       ok: true,

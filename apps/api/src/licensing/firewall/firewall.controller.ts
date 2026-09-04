@@ -2,36 +2,14 @@ import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from 
 import { FirewallService } from './firewall.service';
 import { PrismaService } from '../../prisma.service';
 import { JwtService } from '@nestjs/jwt';
-
-function getTokenFromHeader(auth?: string): string | null {
-  if (!auth) return null;
-  const parts = auth.split(' ');
-  if (parts.length === 2 && parts[0] === 'Bearer') return parts[1];
-  return null;
-}
+import { getRequestContext } from '../../common/auth-context';
 
 @Controller('licensing/firewall')
 export class FirewallController {
   constructor(private readonly service: FirewallService, private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
   private async getCtx(authorization?: string) {
-    const token = getTokenFromHeader(authorization);
-    if (!token) return { ok: false, error: 'Unauthorized' } as const;
-    try {
-      const payload: any = this.jwt.verify(token);
-      const userId: string | null = payload?.sub ?? null;
-      if (!userId) return { ok: false, error: 'Invalid token' } as const;
-      const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-      const username = String(payload?.username || '').toLowerCase();
-      const isGlobalAdmin = globalAdmins.includes(username);
-      const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId }, select: { companyId: true, role: true } });
-      const isAdmin = isGlobalAdmin || memberships.some((m: any) => m.role === 'ADMIN');
-      const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      return { ok: true, userId, isAdmin, isTechnician, allowedCompanyIds } as const;
-    } catch {
-      return { ok: false, error: 'Invalid token' } as const;
-    }
+    return getRequestContext(this.jwt, this.prisma, authorization);
   }
 
   @Get()

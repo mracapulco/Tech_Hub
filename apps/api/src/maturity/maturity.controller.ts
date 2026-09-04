@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Param, Post, Delete, Put } from '@nestj
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { MaturityAiService } from './maturity.ai.service';
+import { getRequestContext } from '../common/auth-context';
 
 type CreateAssessmentDto = {
   id?: string;
@@ -21,44 +22,21 @@ export class MaturityController {
     private readonly ai: MaturityAiService,
   ) {}
 
-  private getUserIdFromAuthHeader(authorization?: string): string | null {
-    if (!authorization) return null;
-    const parts = authorization.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
-    const token = parts[1];
-    try {
-      const payload = this.jwt.verify(token, { secret: process.env.JWT_SECRET || 'dev-secret' });
-      return payload?.sub ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async getMemberships(userId: string) {
-    return this.prisma.userCompanyMembership.findMany({ where: { userId } });
-  }
-
-  private async getRoles(userId: string) {
-    const memberships = await this.getMemberships(userId);
-    const roles = (memberships || []).map((m: any) => String(m.role));
-    const isAdmin = roles.includes('ADMIN');
-    const isTech = roles.includes('TECHNICIAN');
-    return { isAdmin, isTech, memberships };
+  private async getCtx(authorization?: string) {
+    return getRequestContext(this.jwt, this.prisma, authorization);
   }
 
   @Get()
   async list(@Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech, memberships } = await this.getRoles(userId);
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
 
     let records: any[] = [];
-    if (isAdmin || isTech) {
+    if (ctx.isAdmin || ctx.isTechnician) {
       records = await this.prisma.maturityAssessment.findMany({ include: { company: true, analysis: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
     } else {
-      const companyIds = (memberships || []).map((m: any) => m.companyId);
-      if (companyIds.length === 0) return { ok: true, data: [] };
-      records = await this.prisma.maturityAssessment.findMany({ where: { companyId: { in: companyIds } }, include: { company: true, analysis: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
+      if (ctx.allowedCompanyIds.length === 0) return { ok: true, data: [] };
+      records = await this.prisma.maturityAssessment.findMany({ where: { companyId: { in: ctx.allowedCompanyIds } }, include: { company: true, analysis: true }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] });
     }
 
     const data = records.map((r: any) => ({
@@ -78,15 +56,13 @@ export class MaturityController {
 
   @Get(':id')
   async detail(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech, memberships } = await this.getRoles(userId);
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
 
     const record = await this.prisma.maturityAssessment.findUnique({ where: { id }, include: { company: true, analysis: true } });
     if (!record) return { ok: false, error: 'Registro não encontrado.' };
-    if (!(isAdmin || isTech)) {
-      const hasCompany = (memberships || []).some((m: any) => m.companyId === record.companyId);
-      if (!hasCompany) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician) && !ctx.allowedCompanyIds.includes(record.companyId)) {
+      return { ok: false, error: 'Forbidden' };
     }
     const data = {
       id: record.id,
@@ -105,10 +81,9 @@ export class MaturityController {
 
   @Post()
   async create(@Body() body: CreateAssessmentDto, @Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech } = await this.getRoles(userId);
-    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
 
     const { id, date, companyId, answers, groupScores, totalScore, maxScore } = body || ({} as any);
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'Data inválida (YYYY-MM-DD).' };
@@ -149,10 +124,9 @@ export class MaturityController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech } = await this.getRoles(userId);
-    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
     try {
       try {
         await this.prisma.maturityAnalysis.delete({ where: { assessmentId: String(id) } });
@@ -169,20 +143,20 @@ export class MaturityController {
     @Body() body: any,
     @Headers('authorization') authorization?: string,
   ) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech } = await this.getRoles(userId);
-    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    const authCtx = await this.getCtx(authorization);
+    if (!authCtx.ok) return { ok: false, error: authCtx.error };
+    if (!(authCtx.isAdmin || authCtx.isTechnician)) return { ok: false, error: 'Forbidden' };
+    const userId = authCtx.userId;
 
     const { assessmentId, answers, companyContext, targetFrameworks, language, depth } = body || {};
     let sourceAnswers = answers;
-    let ctx = companyContext || {};
+    let companyCtx = companyContext || {};
     if (assessmentId && !answers) {
       const record = await this.prisma.maturityAssessment.findUnique({ where: { id: String(assessmentId) } });
       if (!record) return { ok: false, error: 'Avaliação não encontrada.' };
       sourceAnswers = record.answers || { groupScores: record.groupScores, totalScore: record.totalScore, maxScore: record.maxScore };
       // Passar companyId para permitir carregamento de perfil do cliente
-      ctx = { ...(companyContext || {}), companyId: record.companyId };
+      companyCtx = { ...(companyContext || {}), companyId: record.companyId };
     }
     // Se houver assessmentId, processar de forma assíncrona para evitar timeout de requisição longa
     if (assessmentId) {
@@ -197,7 +171,7 @@ export class MaturityController {
         try {
           const result = await this.ai.analyze({
             answers: sourceAnswers,
-            companyContext: ctx,
+            companyContext: companyCtx,
             targetFrameworks,
             language,
             depth,
@@ -222,7 +196,7 @@ export class MaturityController {
     try {
       const result = await this.ai.analyze({
         answers: sourceAnswers,
-        companyContext: ctx,
+        companyContext: companyCtx,
         targetFrameworks,
         language,
         depth,
@@ -238,15 +212,13 @@ export class MaturityController {
   // Obter análise salva (visível a clientes vinculados)
   @Get(':id/analysis')
   async getAnalysis(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech, memberships } = await this.getRoles(userId);
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
 
     const record = await this.prisma.maturityAssessment.findUnique({ where: { id: String(id) } });
     if (!record) return { ok: false, error: 'Registro não encontrado.' };
-    if (!(isAdmin || isTech)) {
-      const hasCompany = (memberships || []).some((m: any) => m.companyId === record.companyId);
-      if (!hasCompany) return { ok: false, error: 'Forbidden' };
+    if (!(ctx.isAdmin || ctx.isTechnician) && !ctx.allowedCompanyIds.includes(record.companyId)) {
+      return { ok: false, error: 'Forbidden' };
     }
     const analysis = await this.prisma.maturityAnalysis.findUnique({ where: { assessmentId: String(id) } });
     if (!analysis) return { ok: true, data: null };
@@ -264,16 +236,15 @@ export class MaturityController {
   // Atualizar análise manualmente (apenas admin/tech)
   @Put(':id/analysis')
   async updateAnalysis(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech } = await this.getRoles(userId);
-    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
     const content = body?.content;
     if (!content) return { ok: false, error: 'Conteúdo ausente.' };
     const updated = await this.prisma.maturityAnalysis.upsert({
       where: { assessmentId: String(id) },
-      update: { content, updatedAt: new Date(), createdById: userId },
-      create: { assessmentId: String(id), content, createdById: userId },
+      update: { content, updatedAt: new Date(), createdById: ctx.userId },
+      create: { assessmentId: String(id), content, createdById: ctx.userId },
     });
     return { ok: true, data: { id: updated.id } };
   }
@@ -281,10 +252,9 @@ export class MaturityController {
   // Excluir análise (apenas admin/tech)
   @Delete(':id/analysis')
   async deleteAnalysis(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, error: 'Unauthorized' };
-    const { isAdmin, isTech } = await this.getRoles(userId);
-    if (!(isAdmin || isTech)) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!(ctx.isAdmin || ctx.isTechnician)) return { ok: false, error: 'Forbidden' };
     try {
       await this.prisma.maturityAnalysis.delete({ where: { assessmentId: String(id) } });
       return { ok: true };

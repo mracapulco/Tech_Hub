@@ -2,6 +2,7 @@ import { Body, Controller, Get, Put, Headers, Post, Param, Delete } from '@nestj
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { getRequestContext } from '../common/auth-context';
 
 class UpdateMeDto {
   name?: string;
@@ -15,67 +16,36 @@ class UpdateMeDto {
 export class UsersController {
   constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
-  private getUserIdFromAuthHeader(authorization?: string): string | null {
-    if (!authorization) return null;
-    const parts = authorization.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
-    const token = parts[1];
-    try {
-      const payload = this.jwt.verify(token, { secret: process.env.JWT_SECRET || 'dev-secret' });
-      return payload?.sub ?? null;
-    } catch {
-      return null;
-    }
+  private async getCtx(authorization?: string) {
+    return getRequestContext(this.jwt, this.prisma, authorization);
   }
 
   @Get('me')
   async me(@Headers('authorization') authorization?: string) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, message: 'Não autorizado' };
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, message: 'Não autorizado' };
+    const user = await this.prisma.user.findUnique({ where: { id: ctx.userId } });
     if (!user) return { ok: false, message: 'Usuário não encontrado' };
-    const globalAdmins = String(process.env.GLOBAL_ADMINS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-    const isGlobalAdmin = globalAdmins.includes(String((user as any).username || '').toLowerCase());
     return {
       ok: true,
-      user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null, isGlobalAdmin },
+      user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null, isGlobalAdmin: ctx.isGlobalAdmin },
     };
-  }
-
-  private verifyToken(authorization?: string): boolean {
-    if (!authorization) return false;
-    const parts = authorization.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') return false;
-    const token = parts[1];
-    try {
-      this.jwt.verify(token, { secret: process.env.JWT_SECRET || 'dev-secret' });
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   // Listar todos os usuários
   @Get()
   async list(@Headers('authorization') authorization?: string) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const requesterId = this.getUserIdFromAuthHeader(authorization);
-    if (!requesterId) return { ok: false, error: 'Unauthorized' };
-    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { companyId: true, role: true } });
-    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-    const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
     let users: any[] = [];
-    if (isAdmin || isTechnician) {
+    if (ctx.isAdmin || ctx.isTechnician) {
       users = await this.prisma.user.findMany({ orderBy: { name: 'asc' } });
+    } else if (ctx.allowedCompanyIds.length === 0) {
+      users = await this.prisma.user.findMany({ where: { id: ctx.userId }, orderBy: { name: 'asc' } });
     } else {
-      const allowedCompanyIds = memberships.map((m: any) => m.companyId);
-      if (allowedCompanyIds.length === 0) {
-        users = await this.prisma.user.findMany({ where: { id: requesterId }, orderBy: { name: 'asc' } });
-      } else {
-        const relatedMemberships = await this.prisma.userCompanyMembership.findMany({ where: { companyId: { in: allowedCompanyIds } }, select: { userId: true } });
-        const userIds = Array.from(new Set(relatedMemberships.map((m: any) => m.userId)));
-        users = await this.prisma.user.findMany({ where: { id: { in: userIds } }, orderBy: { name: 'asc' } });
-      }
+      const relatedMemberships = await this.prisma.userCompanyMembership.findMany({ where: { companyId: { in: ctx.allowedCompanyIds } }, select: { userId: true } });
+      const userIds = Array.from(new Set(relatedMemberships.map((m: any) => m.userId)));
+      users = await this.prisma.user.findMany({ where: { id: { in: userIds } }, orderBy: { name: 'asc' } });
     }
     return {
       ok: true,
@@ -86,12 +56,9 @@ export class UsersController {
   // Criar usuário
   @Post()
   async create(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const requesterId = this.getUserIdFromAuthHeader(authorization);
-    if (!requesterId) return { ok: false, error: 'Unauthorized' };
-    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
-    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-    if (!isAdmin) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
 
     const email = String(body.email || '').trim();
     const username = body.username ? String(body.username).trim() : null;
@@ -147,7 +114,8 @@ export class UsersController {
   // Detalhar usuário
   @Get(':id')
   async detail(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) return { ok: false, error: 'Usuário não encontrado.' };
     const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: id }, include: { company: true } });
@@ -172,13 +140,9 @@ export class UsersController {
   // Atualizar usuário
   @Put(':id')
   async update(@Param('id') id: string, @Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const requesterId = this.getUserIdFromAuthHeader(authorization);
-    if (!requesterId) return { ok: false, error: 'Unauthorized' };
-    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
-    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-    const isTechnician = memberships.some((m: any) => m.role === 'TECHNICIAN');
-    if (!(isAdmin || isTechnician || requesterId === id)) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!(ctx.isAdmin || ctx.isTechnician || ctx.userId === id)) return { ok: false, error: 'Forbidden' };
     const data: any = {};
     if (body.email !== undefined) data.email = String(body.email).trim();
     if (body.username !== undefined) data.username = body.username ? String(body.username).trim() : null;
@@ -186,9 +150,14 @@ export class UsersController {
     if (body.lastName !== undefined) data.lastName = body.lastName ? String(body.lastName).trim() : null;
     if (body.password) data.password = await bcrypt.hash(String(body.password), 10);
     if (body.avatarUrl !== undefined) data.avatarUrl = body.avatarUrl ? String(body.avatarUrl).trim() : null;
+    // Ativar/desativar conta: apenas ADMIN pode alterar o status de outro usuário.
+    if (body.status !== undefined && ctx.isAdmin) {
+      const status = String(body.status).trim().toUpperCase();
+      if (status === 'ACTIVE' || status === 'INACTIVE') data.status = status;
+    }
     try {
       const updated = await this.prisma.user.update({ where: { id }, data });
-      return { ok: true, data: { id: updated.id, username: (updated as any).username, name: updated.name, lastName: (updated as any).lastName ?? null, email: updated.email, avatarUrl: (updated as any).avatarUrl ?? null } };
+      return { ok: true, data: { id: updated.id, username: (updated as any).username, name: updated.name, lastName: (updated as any).lastName ?? null, email: updated.email, avatarUrl: (updated as any).avatarUrl ?? null, status: updated.status } };
     } catch (e: any) {
       if (e?.code === 'P2002') {
         const target = e?.meta?.target;
@@ -204,12 +173,9 @@ export class UsersController {
   // Excluir usuário
   @Delete(':id')
   async remove(@Param('id') id: string, @Headers('authorization') authorization?: string) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const requesterId = this.getUserIdFromAuthHeader(authorization);
-    if (!requesterId) return { ok: false, error: 'Unauthorized' };
-    const memberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
-    const isAdmin = memberships.some((m: any) => m.role === 'ADMIN');
-    if (!isAdmin) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) return { ok: false, error: 'Usuário não encontrado.' };
     try {
@@ -227,8 +193,8 @@ export class UsersController {
 
   @Put('me')
   async updateMe(@Headers('authorization') authorization: string | undefined, @Body() body: UpdateMeDto) {
-    const userId = this.getUserIdFromAuthHeader(authorization);
-    if (!userId) return { ok: false, message: 'Não autorizado' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, message: 'Não autorizado' };
 
     const data: any = {};
     if (body.name !== undefined) data.name = typeof body.name === 'string' ? body.name.trim() : body.name;
@@ -238,7 +204,7 @@ export class UsersController {
     if (body.avatarUrl !== undefined) data.avatarUrl = body.avatarUrl ? String(body.avatarUrl).trim() : null;
 
     try {
-      const user = await this.prisma.user.update({ where: { id: userId }, data });
+      const user = await this.prisma.user.update({ where: { id: ctx.userId }, data });
       return {
         ok: true,
         user: { id: user.id, username: (user as any).username, name: user.name, lastName: (user as any).lastName ?? null, email: user.email, avatarUrl: (user as any).avatarUrl ?? null },
@@ -262,12 +228,9 @@ export class UsersController {
     @Headers('authorization') authorization: string | undefined,
     @Body() body: { companyId?: string; role?: string },
   ) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const requesterId = this.getUserIdFromAuthHeader(authorization);
-    if (!requesterId) return { ok: false, error: 'Unauthorized' };
-    const reqMemberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
-    const isAdmin = reqMemberships.some((m: any) => m.role === 'ADMIN');
-    if (!isAdmin) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
 
     const companyId = body.companyId ? String(body.companyId).trim() : '';
     const role = body.role ? String(body.role).trim() : 'CLIENT';
@@ -299,12 +262,9 @@ export class UsersController {
     @Param('membershipId') membershipId: string,
     @Headers('authorization') authorization: string | undefined,
   ) {
-    if (!this.verifyToken(authorization)) return { ok: false, error: 'Unauthorized' };
-    const requesterId = this.getUserIdFromAuthHeader(authorization);
-    if (!requesterId) return { ok: false, error: 'Unauthorized' };
-    const reqMemberships = await this.prisma.userCompanyMembership.findMany({ where: { userId: requesterId }, select: { role: true } });
-    const isAdmin = reqMemberships.some((m: any) => m.role === 'ADMIN');
-    if (!isAdmin) return { ok: false, error: 'Forbidden' };
+    const ctx = await this.getCtx(authorization);
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (!ctx.isAdmin) return { ok: false, error: 'Forbidden' };
 
     const membership = await this.prisma.userCompanyMembership.findUnique({ where: { id: membershipId } });
     if (!membership) return { ok: false, error: 'Vínculo não encontrado.' };
