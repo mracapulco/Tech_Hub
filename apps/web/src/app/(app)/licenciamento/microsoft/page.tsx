@@ -889,7 +889,7 @@ export default function MicrosoftLicPage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded p-4">
+          <div className="bg-card border border-border rounded p-4 sticky top-4 self-start">
             <h2 className="font-semibold mb-3">{selectedMap ? "Mapear cliente externo" : "Selecione um cliente externo"}</h2>
             {!selectedMap || !mapEditor ? (
               <div className="text-sm text-muted">Use os botões da lista para mapear ou revisar um cliente descoberto pela sincronização.</div>

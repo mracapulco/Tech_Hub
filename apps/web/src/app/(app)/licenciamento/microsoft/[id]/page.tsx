@@ -11,22 +11,151 @@ export default function MicrosoftAgreementViewPage({ params }: { params: { id: s
   const user = typeof window !== "undefined" ? getUser() : null;
   const [agreement, setAgreement] = useState<MicrosoftAgreement | null>(null);
   const [isAdminOrTech, setIsAdminOrTech] = useState(false);
+  // Margem/custo são informação interna — só ADMIN vê (nem técnico, nem cliente).
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [companyLogo, setCompanyLogo] = useState<string>("");
 
   useEffect(() => {
     (async () => {
       if (!token) return;
       const res = await apiGet<{ ok: boolean; data?: MicrosoftAgreement; error?: string }>(`/licensing/microsoft/agreements/${params.id}`, token);
-      if (res?.ok && res.data) setAgreement(res.data);
+      if (res?.ok && res.data) {
+        setAgreement(res.data);
+        if (res.data.companyId) {
+          try {
+            const comp = await apiGet<{ ok: boolean; data?: any }>(`/companies/${res.data.companyId}`, token);
+            if (comp?.ok && comp.data?.logoUrl) setCompanyLogo(getUploadUrl(comp.data.logoUrl));
+          } catch {}
+        }
+      }
       if (user?.id) {
         try {
           const userRes = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (userRes?.data?.memberships || []) as { role: string }[];
           const isGlobalAdmin = !!userRes?.data?.isGlobalAdmin;
           setIsAdminOrTech(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN" || item.role === "TECHNICIAN"));
+          setIsAdmin(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN"));
         } catch {}
       }
     })();
   }, [token, user?.id, params.id]);
+
+  function exportPDF() {
+    if (!agreement) return;
+    const now = new Date().toLocaleString();
+    const cmpName = agreement.companyName || "";
+    const cmpLogo = companyLogo || "";
+    const costRows = isAdmin
+      ? `
+        <tr><th>Custo unitário</th><td>${formatCurrency(agreement.unitCost, agreement.currency)}</td></tr>
+        <tr><th>Custo da cobrança</th><td>${formatCurrency(agreement.billingCost, agreement.currency)}</td></tr>
+        <tr><th>Margem</th><td>${formatCurrency(agreement.margin, agreement.currency)}</td></tr>
+        <tr><th>Margem %</th><td>${agreement.marginPercent != null ? `${agreement.marginPercent.toFixed(2)}%` : "—"}</td></tr>
+      `
+      : "";
+    const docsRows = agreement.documents.length
+      ? agreement.documents
+          .map(
+            (doc) => `
+        <tr>
+          <td>${doc.title}</td>
+          <td>${statusLabel(doc.documentType)}</td>
+          <td>${formatDate(doc.issuedAt)}</td>
+          <td>${doc.amount != null ? formatCurrency(doc.amount, doc.currency) : "—"}</td>
+        </tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="4" style="text-align:center;color:#6b7280">Nenhum documento associado.</td></tr>`;
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório de Licenciamento Microsoft</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; color: #111827; }
+            .container { max-width: 900px; margin: 0 auto; padding: 24px; }
+            .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; }
+            .logo { height: 40px; object-fit: contain; }
+            h1 { font-size: 20px; margin: 0; }
+            h2 { font-size: 18px; margin: 20px 0 8px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th, td { border: 1px solid #e5e7eb; padding: 8px; font-size: 13px; }
+            th { background: #f9fafb; text-align: left; }
+            .muted { color: #6b7280; font-size: 12px; }
+            .section { margin-top: 16px; }
+            .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+            .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #ffffff; }
+            @page { margin: 16mm; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div>
+                <h1>Relatório de Licenciamento Microsoft</h1>
+                <div class="muted">Gerado pelo Tech Hub em ${now}</div>
+              </div>
+              <img class="logo" src="${location.origin}/logo.svg" onerror="this.style.display='none'" />
+            </div>
+            <div class="section">
+              <h2>Resumo</h2>
+              <div class="cards">
+                <div class="card">
+                  <div class="muted">Assinatura</div>
+                  <div><strong>${agreement.productName || "—"}</strong></div>
+                  <div class="muted">Categoria ${agreement.category || "—"}</div>
+                  <div class="muted">Fornecedor ${statusLabel(agreement.sourceProvider || "MANUAL")}</div>
+                </div>
+                <div class="card">
+                  <div class="muted">Status</div>
+                  <div><strong>${statusLabel(agreement.providerStatus || agreement.status)}</strong></div>
+                  <div class="muted">${agreement.isRecurring ? "Recorrente" : "Não recorrente"}</div>
+                  <div class="muted">Vencimento ${formatDate(agreement.expiresAt)}</div>
+                </div>
+                <div class="card" style="display:flex;align-items:center;justify-content:center;gap:8px">
+                  <div style="width:100%">
+                    <div class="muted">Empresa ${cmpName ? "— " + cmpName : "(não mapeado)"}</div>
+                    ${cmpLogo ? '<img src="' + cmpLogo + '" alt="Logo da empresa" style="max-height:56px;object-fit:contain;margin-top:6px" />' : '<div style="height:56px;border:1px solid #e5e7eb;border-radius:8px;background:#f3f4f6"></div>'}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="section">
+              <h2>Detalhes</h2>
+              <table>
+                <tbody>
+                  <tr><th>Cliente externo</th><td>${titleCase(agreement.externalCustomerName) || "—"}</td></tr>
+                  <tr><th>Tenant/domain Microsoft</th><td>${agreement.microsoftDomain || agreement.tenantDomain || "—"}</td></tr>
+                  <tr><th>Quantidade</th><td>${agreement.quantityPurchased ?? "—"}</td></tr>
+                  <tr><th>Cobrança</th><td>${formatBillingPeriod(agreement.billingModel)}</td></tr>
+                  <tr><th>Compromisso</th><td>${formatBillingPeriod(agreement.subscriptionPeriod)}</td></tr>
+                  <tr><th>Data de criação</th><td>${formatDate(agreement.startDate || agreement.createdAt)}</td></tr>
+                  <tr><th>Renovação</th><td>${agreement.isRecurring ? formatDate(agreement.renewalDate) : "Não recorrente"}</td></tr>
+                  <tr><th>Preço unitário</th><td>${formatCurrency(agreement.unitPrice, agreement.currency)}</td></tr>
+                  <tr><th>Valor da cobrança</th><td>${formatCurrency(agreement.billingAmount ?? agreement.totalPrice, agreement.currency)}</td></tr>
+                  ${costRows}
+                </tbody>
+              </table>
+            </div>
+            <div class="section">
+              <h2>Documentos</h2>
+              <table>
+                <thead>
+                  <tr><th>Título</th><th>Tipo</th><th>Emissão</th><th>Valor</th></tr>
+                </thead>
+                <tbody>${docsRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, "_blank");
+    if (w) setTimeout(() => w.print(), 300);
+  }
 
   if (!token) {
     return <div className="p-4 text-sm text-muted">Faça login para continuar.</div>;
@@ -54,7 +183,7 @@ export default function MicrosoftAgreementViewPage({ params }: { params: { id: s
               Editar
             </a>
           )}
-          <button onClick={() => window.print()} className="px-3 py-2 rounded bg-border text-text">
+          <button onClick={exportPDF} className="px-3 py-2 rounded bg-border text-text">
             Imprimir
           </button>
         </div>
@@ -91,11 +220,15 @@ export default function MicrosoftAgreementViewPage({ params }: { params: { id: s
             <Field label="Renewal Date" value={agreement.isRecurring ? formatDate(agreement.renewalDate) : "Não recorrente"} />
             <Field label="Expiration Date" value={formatDate(agreement.expiresAt)} />
             <Field label="Preço unitário" value={formatCurrency(agreement.unitPrice, agreement.currency)} />
-            <Field label="Custo unitário" value={formatCurrency(agreement.unitCost, agreement.currency)} />
             <Field label="Valor da cobrança" value={formatCurrency(agreement.billingAmount ?? agreement.totalPrice, agreement.currency)} />
-            <Field label="Custo da cobrança" value={formatCurrency(agreement.billingCost, agreement.currency)} />
-            <Field label="Margem" value={formatCurrency(agreement.margin, agreement.currency)} />
-            <Field label="Margem %" value={agreement.marginPercent != null ? `${agreement.marginPercent.toFixed(2)}%` : "—"} />
+            {isAdmin && (
+              <>
+                <Field label="Custo unitário" value={formatCurrency(agreement.unitCost, agreement.currency)} />
+                <Field label="Custo da cobrança" value={formatCurrency(agreement.billingCost, agreement.currency)} />
+                <Field label="Margem" value={formatCurrency(agreement.margin, agreement.currency)} />
+                <Field label="Margem %" value={agreement.marginPercent != null ? `${agreement.marginPercent.toFixed(2)}%` : "—"} />
+              </>
+            )}
           </div>
         </div>
 
