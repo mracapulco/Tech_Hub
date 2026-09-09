@@ -29,6 +29,7 @@ services:
       - db
     volumes:
       - uploads_data:/app/uploads
+      - audit_archive_data:/app/audit-archive
     ports:
       - "4000:3000"
     networks:
@@ -60,3 +61,4 @@ networks:
 volumes:
   db_data:
   uploads_data:
+  audit_archive_data:

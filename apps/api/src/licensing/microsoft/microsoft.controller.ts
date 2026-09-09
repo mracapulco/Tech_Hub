@@ -1,8 +1,10 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { MicrosoftService } from './microsoft.service';
 import { PrismaService } from '../../prisma.service';
 import { JwtService } from '@nestjs/jwt';
-import { getRequestContext } from '../../common/auth-context';
+import { getRequestContext, resolveIp } from '../../common/auth-context';
+import { AuditLogService } from '../../audit/audit-log.service';
 
 @Controller('licensing/microsoft')
 export class MicrosoftController {
@@ -10,6 +12,7 @@ export class MicrosoftController {
     private readonly service: MicrosoftService,
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   private async getCtx(authorization?: string) {
@@ -71,12 +74,33 @@ export class MicrosoftController {
   }
 
   @Get('agreements/:id')
-  async getAgreement(@Param('id') id: string, @Headers('authorization') authorization?: string) {
+  async getAgreement(@Param('id') id: string, @Headers('authorization') authorization: string | undefined, @Req() req: Request) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     const found = await this.service.getAgreement(id);
     if (!found.ok) return found;
     if (!this.canAccessCompany(ctx, (found.data as any)?.companyId)) return { ok: false, error: 'Forbidden' };
+    // Campos financeiros (margem, custo) só são exibidos ao perfil Administrador — audita quem os acessou.
+    if (ctx.isAdmin) {
+      this.auditLog
+        .log({
+          actorUserId: ctx.userId,
+          actorUsername: ctx.username,
+          actorRole: 'ADMIN',
+          companyId: (found.data as any)?.companyId ?? null,
+          action: 'LICENSE_MS_FINANCIAL_DATA_VIEWED',
+          entityType: 'MicrosoftAgreement',
+          entityId: id,
+          description: `Visualizou dados financeiros da assinatura Microsoft ${id}`,
+          httpMethod: 'GET',
+          route: `/licensing/microsoft/agreements/${id}`,
+          ipAddress: resolveIp(req),
+          userAgent: req.headers?.['user-agent'] || null,
+          status: 'SUCCESS',
+          severity: 'SECURITY',
+        })
+        .catch(() => {});
+    }
     return found;
   }
 

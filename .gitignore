@@ -11,6 +11,7 @@ apps/api/dist/
 docker/*.log
 uploads/*
 !uploads/.gitkeep
+audit-archive/
 backups/
 /backup_*.sql
 tmp.png

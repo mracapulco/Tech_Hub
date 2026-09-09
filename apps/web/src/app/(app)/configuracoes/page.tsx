@@ -12,6 +12,7 @@ export default function ConfiguracoesPage() {
         <Link href="/configuracoes/tipo-dispositivo" className="inline-block ml-3 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Tipo de dispositivo</Link>
         <Link href="/configuracoes/dispositivos" className="inline-block ml-3 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Dispositivos</Link>
         <Link href="/configuracoes/ia" className="inline-block ml-3 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">IA</Link>
+        <Link href="/configuracoes/auditoria" className="inline-block ml-3 px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Auditoria</Link>
       </div>
     </main>
   );

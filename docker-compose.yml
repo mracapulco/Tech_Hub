@@ -31,6 +31,7 @@ services:
       TECH_HUB_FRONTEND_URL: ${TECH_HUB_FRONTEND_URL}
     volumes:
       - ./uploads:/app/uploads
+      - ./audit-archive:/app/audit-archive
     depends_on:
       - db
     ports:

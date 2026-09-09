@@ -21,6 +21,7 @@ import { FirewallModule } from './licensing/firewall/firewall.module';
 import { MicrosoftModule } from './licensing/microsoft/microsoft.module';
 import { BackupModule } from './backup/backup.module';
 import { AdfsModule } from './adfs/adfs.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AdfsModule } from './adfs/adfs.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    AuditModule,
     AuthModule,
     UsersModule,
     CompaniesModule,
@@ -48,6 +50,7 @@ import { AdfsModule } from './adfs/adfs.module';
     BackupModule,
     AdfsModule,
   ],
+  // AuditModule é @Global(): AuditLogService fica disponível em todos os módulos acima.
   controllers: [AppController],
   providers: [AppService],
 })

@@ -16,6 +16,13 @@ export function getJwtSecret(): string {
   return secret;
 }
 
+/** Resolve o IP do requisitante, considerando proxy reverso (nginx/traefik) na frente da API. */
+export function resolveIp(req: any): string | null {
+  const forwarded = req?.headers?.['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0].trim();
+  return req?.socket?.remoteAddress || req?.ip || null;
+}
+
 export function getBearerToken(authorization?: string): string | null {
   if (!authorization) return null;
   const parts = authorization.split(' ');

@@ -4,6 +4,16 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.5.0] — 2026-09-09
+
+### Adicionado
+- Log de auditoria: nova tela "Configurações › Auditoria" (somente Administrador) com histórico de ações de usuários — login/logout (sucesso e falha), toda mutação de negócio (criação/edição/exclusão) e leitura de dados financeiros sensíveis de licenciamento Microsoft. Cada registro guarda ator, empresa, ação, entidade, diff de alteração (com senha/token/segredo sempre redigidos), IP, user agent e status.
+- Log de auditoria: filtros por período, empresa, ação, tipo de entidade, status e busca livre, com paginação e exportação para CSV (limitada a um período de até 12 meses por exportação). A própria visualização e exportação do log são auditadas.
+- Log de auditoria: retenção de 12 meses na tabela principal — registros mais antigos são arquivados automaticamente (arquivo comprimido) e removidos da tabela ativa.
+
+### Operacional
+- Versões atualizadas: root e web `0.5.0`.
+
 ## [0.4.7] — 2026-09-09
 
 ### Alterado

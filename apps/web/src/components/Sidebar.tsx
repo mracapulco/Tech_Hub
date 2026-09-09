@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clearAuth, getUser, getToken } from '@/lib/auth';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
 import Image from 'next/image';
 
 type SidebarSection = 'gestao' | 'seguranca' | 'configuracoes' | null;
@@ -66,6 +66,10 @@ export default function Sidebar() {
   };
 
   const onLogout = () => {
+    const token = getToken();
+    if (token) {
+      apiPost('/auth/logout', token, {}).catch(() => {});
+    }
     clearAuth();
     router.push('/login');
   };
@@ -382,6 +386,14 @@ export default function Sidebar() {
                   <span>IA</span>
                 </Link>
               )}
+              {isAdmin && (
+                <Link href="/configuracoes/auditoria" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Auditoria">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                    <path d="M12 2l7 3v6c0 5-3.4 8.4-7 11-3.6-2.6-7-6-7-11V5l7-3z" strokeWidth="2" strokeLinejoin="round" />
+                  </svg>
+                  <span>Auditoria</span>
+                </Link>
+              )}
             </div>
           </details>
         ) : (
@@ -439,6 +451,14 @@ export default function Sidebar() {
                     <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                   <span>IA</span>
+                </Link>
+              )}
+              {isAdmin && (
+                <Link href="/configuracoes/auditoria" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Auditoria">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                    <path d="M12 2l7 3v6c0 5-3.4 8.4-7 11-3.6-2.6-7-6-7-11V5l7-3z" strokeWidth="2" strokeLinejoin="round" />
+                  </svg>
+                  <span>Auditoria</span>
                 </Link>
               )}
             </div>

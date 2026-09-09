@@ -89,6 +89,45 @@ model UserCompanyMembership {
   @@unique([userId, companyId])
 }
 
+// Log de auditoria: registro append-only de ações de usuários (autenticação, mutações
+// de negócio e leituras sensíveis). Campos de ator/empresa são denormalizados de propósito
+// (snapshot no momento do evento) para que o histórico sobreviva à edição/exclusão do
+// usuário ou empresa relacionados — por isso não há relations/FKs aqui.
+model AuditLog {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  actorUserId   String?
+  actorUsername String?
+  actorName     String?
+  actorRole     String?
+
+  companyId   String?
+  companyName String?
+
+  action      String
+  entityType  String?
+  entityId    String?
+  description String
+
+  changes Json?
+
+  httpMethod String?
+  route      String?
+  ipAddress  String?
+  userAgent  String?
+
+  status       String  @default("SUCCESS")
+  errorMessage String?
+  severity     String  @default("INFO")
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+}
+
 // Registro de testes de maturidade de segurança
 model MaturityAssessment {
   id         String   @id @default(uuid())
