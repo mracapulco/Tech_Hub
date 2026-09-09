@@ -62,7 +62,9 @@ SCRIPT_HASH_BEFORE="$(md5sum "$SCRIPT_PATH" | cut -d' ' -f1)"
 BEFORE_COMMIT="$(git rev-parse --short HEAD)"
 
 log "Buscando atualizações do GitHub..."
-git fetch origin --tags || fail "falha no git fetch"
+# Busca de tags é só informativa — uma tag local desatualizada/divergente (ex.: de um
+# histórico antigo) não deve travar o deploy, então isso aqui não é fatal.
+git fetch origin --tags || log "AVISO: falha ao atualizar tags locais (não bloqueia o deploy) — provavelmente uma tag antiga divergente do remoto."
 git pull origin main || fail "falha no git pull"
 
 SCRIPT_HASH_AFTER="$(md5sum "$SCRIPT_PATH" | cut -d' ' -f1)"
