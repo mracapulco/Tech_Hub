@@ -12,4 +12,5 @@ docker/*.log
 uploads/*
 !uploads/.gitkeep
 backups/
+/backup_*.sql
 tmp.png

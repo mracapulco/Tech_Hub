@@ -52,7 +52,7 @@ check_env_var "JWT_SECRET" "dev-secret" "dev_secret_change_me"
 check_env_var "CONFIG_MASTER_KEY" "dev_master_key_change_me"
 
 # --- 2. Estado do git tem que estar limpo, na main ---
-[ -z "$(git status --porcelain)" ] || fail "há alterações locais não commitadas neste checkout — resolva (git status) antes de rodar o deploy"
+[ -z "$(git status --porcelain --untracked-files=no)" ] || fail "há alterações locais não commitadas em arquivos rastreados pelo Git — resolva (git status) antes de rodar o deploy"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$CURRENT_BRANCH" = "main" ] || fail "branch atual é '$CURRENT_BRANCH', esperado 'main'"
 
