@@ -18,7 +18,8 @@ jobs:
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          awk -v tag="$TAG" '
+          VERSION="${TAG#v}"
+          awk -v tag="$VERSION" '
             $0 ~ ("## \\[" tag "\\]") {found=1; print; next}
             found && $0 ~ /^## \[/ {exit}
             found {print}
