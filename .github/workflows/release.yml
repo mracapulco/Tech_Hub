@@ -20,8 +20,8 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
           awk -v tag="$VERSION" '
-            $0 ~ ("## \\[" tag "\\]") {found=1; print; next}
-            found && $0 ~ /^## \[/ {exit}
+            index($0, "## [" tag "]") == 1 {found=1; print; next}
+            found && index($0, "## [") == 1 {exit}
             found {print}
           ' CHANGELOG.md > RELEASE_NOTES.md
           if [ ! -s RELEASE_NOTES.md ]; then
