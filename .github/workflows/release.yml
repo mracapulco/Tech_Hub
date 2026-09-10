@@ -19,20 +19,20 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
-          MATCH=$(awk -v tag="$VERSION" '
+          awk -v tag="$VERSION" '
             index($0, "## [" tag "]") == 1 {found=1; print; next}
             found && index($0, "## [") == 1 {exit}
             found {print}
-          ' CHANGELOG.md)
-          {
-            echo "DEBUG: run_id=${GITHUB_RUN_ID} run_attempt=${GITHUB_RUN_ATTEMPT}"
-            echo
-            if [ -n "$MATCH" ]; then
-              echo "$MATCH"
-            else
-              echo "Release notes for ${TAG} not found in CHANGELOG.md."
-            fi
-          } > RELEASE_NOTES.md
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release notes for ${TAG} not found in CHANGELOG.md." > RELEASE_NOTES.md
+          fi
+      - name: Delete existing release for this tag (if any)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" || true
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
