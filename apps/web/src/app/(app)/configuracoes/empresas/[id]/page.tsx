@@ -26,6 +26,7 @@ export default function EmpresaDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTech, setIsTech] = useState(false);
+  const [isComercial, setIsComercial] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
 
@@ -61,14 +62,17 @@ export default function EmpresaDetailPage() {
       const memberships = (res?.data?.memberships || []) as { role: string; companyId: string }[];
       const admin = memberships.some((m) => m.role === 'ADMIN');
       const tech = memberships.some((m) => m.role === 'TECHNICIAN');
+      const comercial = memberships.some((m) => m.role === 'COMERCIAL');
       const hasCompany = memberships.some((m) => m.companyId === id);
       setIsAdmin(admin);
       setIsTech(tech);
-      setCanEdit(admin || tech || hasCompany);
+      setIsComercial(comercial);
+      setCanEdit(admin || tech || comercial || hasCompany);
       setCanDelete(admin);
     } catch {
       setIsAdmin(false);
       setIsTech(false);
+      setIsComercial(false);
       setCanEdit(false);
       setCanDelete(false);
     }

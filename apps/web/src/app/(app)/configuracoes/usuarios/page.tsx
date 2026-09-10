@@ -12,6 +12,19 @@ function imgUrl(u?: string | null) {
   return u;
 }
 
+function staffRoleLabelPtBr(role: string) {
+  switch (role) {
+    case "ADMIN":
+      return "Administrador";
+    case "TECHNICIAN":
+      return "Técnico";
+    case "COMERCIAL":
+      return "Comercial";
+    default:
+      return role;
+  }
+}
+
 type UserItem = { id: string; username?: string | null; name: string; lastName?: string | null; email: string; status?: string };
 type CompanyItem = { id: string; name: string };
 
@@ -181,7 +194,7 @@ export default function UsuariosPage() {
       setMsgAdminTechForm({ type: 'error', text: linkRes?.error || 'Usuário criado, mas falha ao atribuir papel.' });
       return;
     }
-    setMsgAdminTechForm({ type: 'success', text: 'Usuário criado como Administrador/Técnico.' });
+    setMsgAdminTechForm({ type: 'success', text: `Usuário criado como ${staffRoleLabelPtBr(role)}.` });
     setFormAdminTech({ name: '', lastName: '', email: '', username: '', password: '', avatarUrl: '', role: 'ADMIN' });
     await fetchUsers();
     setShowAdminTechForm(false);
@@ -221,7 +234,7 @@ export default function UsuariosPage() {
                 onClick={() => { setShowAdminTechForm(true); setShowClientForm(false); }}
                 className="rounded-lg bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700"
               >
-                Novo Administrador/Técnico
+                Novo Staff
               </button>
             </>
           )}
@@ -395,17 +408,18 @@ export default function UsuariosPage() {
             <input type="password" value={formAdminTech.password} onChange={(e) => setFormAdminTech({ ...formAdminTech, password: e.target.value })} className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium">Perfil</label>
+            <label className="block text-sm font-medium">Tipo de Staff</label>
             <select value={formAdminTech.role} onChange={(e) => setFormAdminTech({ ...formAdminTech, role: e.target.value })} className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-gray-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary">
               <option value="ADMIN">Administrador</option>
               <option value="TECHNICIAN">Técnico</option>
+              <option value="COMERCIAL">Comercial</option>
             </select>
-            <p className="mt-1 text-xs text-gray-500">Perfis de Administrador/Técnico são globais e não exigem seleção de empresa.</p>
+            <p className="mt-1 text-xs text-gray-500">Perfis de Staff (Administrador, Técnico ou Comercial) são globais e não exigem seleção de empresa.</p>
           </div>
 
           <div className="pt-2 flex gap-2">
             <button type="submit" disabled={savingAdminTech} className="rounded-lg bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700 disabled:opacity-60">
-              {savingAdminTech ? 'Salvando...' : 'Criar Administrador/Técnico'}
+              {savingAdminTech ? 'Salvando...' : 'Criar Staff'}
             </button>
             <button type="button" onClick={() => setShowAdminTechForm(false)} className="rounded-lg bg-gray-200 px-3 py-2 text-gray-800 hover:bg-gray-300">
               Cancelar
@@ -432,7 +446,7 @@ export default function UsuariosPage() {
             <p className="text-sm text-gray-700">Nenhum usuário cadastrado ainda.</p>
             <div className="mt-4 flex justify-center gap-2">
               <button type="button" onClick={() => setShowClientForm(true)} className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700">Novo Cliente</button>
-              <button type="button" onClick={() => setShowAdminTechForm(true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700">Novo Administrador/Técnico</button>
+              <button type="button" onClick={() => setShowAdminTechForm(true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-700">Novo Staff</button>
             </div>
           </div>
         ) : (

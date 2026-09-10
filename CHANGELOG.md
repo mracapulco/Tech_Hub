@@ -4,6 +4,15 @@ Todas as mudanças relevantes deste projeto serão documentadas aqui.
 
 Formato inspirado no Keep a Changelog e versionamento semântico quando aplicável.
 
+## [0.6.0] — 2026-09-10
+
+### Adicionado
+- Usuários: novo tipo de perfil "Comercial" — acesso global (todas as empresas, como Administrador/Técnico) restrito a Licenciamento (Firewall e Microsoft) e Empresas/Clientes, com leitura e edição nesses módulos; demais módulos (Backup, IPAM, AD/File Server, Nobreaks, Zabbix, GLPI, Maturidade, Inventário, Usuários, IA, Auditoria) ficam inacessíveis, inclusive por acesso direto via URL.
+- Configurações › Usuários: formulário "Novo Administrador/Técnico" renomeado para "Novo Staff", com campo "Tipo de Staff" para escolher entre Administrador, Técnico ou Comercial.
+
+### Operacional
+- Versões atualizadas: root e web `0.6.0`.
+
 ## [0.5.0] — 2026-09-09
 
 ### Adicionado

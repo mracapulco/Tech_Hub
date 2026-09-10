@@ -12,6 +12,7 @@ enum Role {
   ADMIN
   TECHNICIAN
   CLIENT
+  COMERCIAL
 }
 
 model User {
@@ -28,6 +29,7 @@ model User {
 
   memberships UserCompanyMembership[]
   inventoryCampaignParticipants InventoryCampaignParticipant[]
+  upsMaintenanceVisits UpsMaintenanceVisit[]
 }
 
 model Company {
@@ -75,6 +77,8 @@ model Company {
   microsoftAgreements MicrosoftAgreement[]
   microsoftAgreementDocuments MicrosoftAgreementDocument[]
   microsoftCustomerMaps MicrosoftDistributorCustomerMap[]
+  upsUnits UpsUnit[]
+  upsChecklistTemplates UpsChecklistTemplate[]
 }
 
 model UserCompanyMembership {
@@ -155,6 +159,7 @@ model DeviceType {
 
   brands      BrandDeviceType[]
   devices     Device[]
+  upsChecklistTemplates UpsChecklistTemplate[]
 }
 
 // Catálogo global de marcas (ex.: APC, Dell, HP)
@@ -205,6 +210,8 @@ model Device {
   status       String     @default("ACTIVE")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+
+  upsUnits     UpsUnit[]
 }
 
 // Configurações globais (ex.: chaves de integração) com valor criptografado
@@ -266,6 +273,7 @@ model Site {
   inventoryAssetSnapshots InventoryAssetSnapshot[]
   inventoryAssetUsers InventoryAssetUser[]
   microsoftAgreements MicrosoftAgreement[]
+  upsUnits UpsUnit[]
 
   @@unique([companyId, name])
 }
@@ -1581,4 +1589,160 @@ model MicrosoftSyncRun {
   @@index([connectionId])
   @@index([status])
   @@index([startedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Manutenção de nobreaks (preventiva/corretiva)
+// ---------------------------------------------------------------------------
+
+enum UpsVisitType {
+  PREVENTIVE
+  CORRECTIVE
+}
+
+enum UpsVisitStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+// Unidade de nobreak instalada em um cliente (o modelo/marca vem do catálogo já existente em Device)
+model UpsUnit {
+  id           String    @id @default(uuid())
+  company      Company   @relation(fields: [companyId], references: [id])
+  companyId    String
+  site         Site?     @relation(fields: [siteId], references: [id])
+  siteId       String?
+  device       Device    @relation(fields: [deviceId], references: [id])
+  deviceId     String
+  serialNumber String?
+  powerVA      Int
+  topology     String?
+  location     String?
+  installedAt  DateTime?
+  status       String    @default("ACTIVE")
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  batteries UpsBattery[]
+  visits    UpsMaintenanceVisit[]
+  plan      UpsMaintenancePlan?
+
+  @@index([companyId])
+  @@index([siteId])
+  @@index([deviceId])
+}
+
+// Histórico de baterias de uma unidade — a mais recente sem replacedAt é a bateria ativa
+model UpsBattery {
+  id                    String    @id @default(uuid())
+  unit                  UpsUnit   @relation(fields: [unitId], references: [id])
+  unitId                String
+  brand                 String?
+  model                 String?
+  capacityAh            Float?
+  voltage               Float?
+  installedAt           DateTime  @default(now())
+  expectedReplacementAt DateTime?
+  replacedAt            DateTime?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+
+  @@index([unitId])
+}
+
+// Regra de recorrência da manutenção preventiva de uma unidade
+model UpsMaintenancePlan {
+  id            String    @id @default(uuid())
+  unit          UpsUnit   @relation(fields: [unitId], references: [id])
+  unitId        String    @unique
+  frequencyDays Int       @default(180)
+  active        Boolean   @default(true)
+  nextDueAt     DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Template de checklist — pode ser global (companyId e deviceTypeId nulos) ou sobrescrito por empresa/tipo de equipamento
+model UpsChecklistTemplate {
+  id           String      @id @default(uuid())
+  company      Company?    @relation(fields: [companyId], references: [id])
+  companyId    String?
+  deviceType   DeviceType? @relation(fields: [deviceTypeId], references: [id])
+  deviceTypeId String?
+  name         String
+  items        Json
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([companyId])
+  @@index([deviceTypeId])
+}
+
+// Visita de manutenção (preventiva ou corretiva) em uma unidade
+model UpsMaintenanceVisit {
+  id              String         @id @default(uuid())
+  unit            UpsUnit        @relation(fields: [unitId], references: [id])
+  unitId          String
+  type            UpsVisitType
+  status          UpsVisitStatus @default(SCHEDULED)
+  scheduledAt     DateTime
+  completedAt     DateTime?
+  technician      User?          @relation(fields: [technicianId], references: [id])
+  technicianId    String?
+  checklist       Json?
+  batteryReplaced Boolean        @default(false)
+  reportedIssue   String?
+  diagnosis       String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  photos UpsMaintenancePhoto[]
+
+  @@index([unitId])
+  @@index([technicianId])
+  @@index([status])
+}
+
+model UpsMaintenancePhoto {
+  id        String               @id @default(uuid())
+  visit     UpsMaintenanceVisit  @relation(fields: [visitId], references: [id])
+  visitId   String
+  fileUrl   String
+  createdAt DateTime             @default(now())
+
+  @@index([visitId])
+}
+
+// Estoque leve de baterias (depósito da MSP) — sem controle de compra/fornecedor
+model UpsBatteryModel {
+  id         String   @id @default(uuid())
+  brand      String
+  model      String
+  capacityAh Float?
+  voltage    Float?
+  quantity   Int      @default(0)
+  minStock   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  movements UpsBatteryMovement[]
+
+  @@unique([brand, model])
+}
+
+model UpsBatteryMovement {
+  id             String          @id @default(uuid())
+  batteryModel   UpsBatteryModel @relation(fields: [batteryModelId], references: [id])
+  batteryModelId String
+  quantityDelta  Int
+  reason         String
+  visitId        String?
+  createdAt      DateTime        @default(now())
+
+  @@index([batteryModelId])
 }

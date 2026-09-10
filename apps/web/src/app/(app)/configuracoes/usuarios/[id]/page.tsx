@@ -260,6 +260,7 @@ export default function UsuarioDetailPage() {
                     <option value="CLIENT">Cliente</option>
                     <option value="TECHNICIAN">Técnico</option>
                     <option value="ADMIN">Administrador</option>
+                    <option value="COMERCIAL">Comercial</option>
                   </select>
                 </div>
                 <div>
@@ -364,6 +365,8 @@ export default function UsuarioDetailPage() {
         return 'Técnico';
       case 'CLIENT':
         return 'Cliente';
+      case 'COMERCIAL':
+        return 'Comercial';
       default:
         return role || '-';
     }

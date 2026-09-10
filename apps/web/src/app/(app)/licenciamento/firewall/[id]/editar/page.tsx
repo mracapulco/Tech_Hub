@@ -42,7 +42,7 @@ export default function FirewallLicEdit({ params }: { params: { id: string } }) 
           const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (res?.data?.memberships || []) as { role: string }[];
           const isGlobalAdmin = !!res?.data?.isGlobalAdmin;
-          setIsAdminOrTech(isGlobalAdmin || memberships.some((m) => m.role === 'ADMIN' || m.role === 'TECHNICIAN'));
+          setIsAdminOrTech(isGlobalAdmin || memberships.some((m) => m.role === 'ADMIN' || m.role === 'TECHNICIAN' || m.role === 'COMERCIAL'));
         } catch {}
       }
       const licData = await apiGet<Lic>(`/licensing/firewall/${id}`, token);

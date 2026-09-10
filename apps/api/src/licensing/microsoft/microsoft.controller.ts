@@ -19,9 +19,9 @@ export class MicrosoftController {
     return getRequestContext(this.jwt, this.prisma, authorization);
   }
 
-  private canAccessCompany(ctx: { isAdmin: boolean; isTechnician: boolean; allowedCompanyIds: string[] }, companyId?: string | null) {
-    if (!companyId) return ctx.isAdmin || ctx.isTechnician;
-    if (ctx.isAdmin || ctx.isTechnician) return true;
+  private canAccessCompany(ctx: { isAdmin: boolean; isTechnician: boolean; isComercial: boolean; allowedCompanyIds: string[] }, companyId?: string | null) {
+    if (!companyId) return ctx.isAdmin || ctx.isTechnician || ctx.isComercial;
+    if (ctx.isAdmin || ctx.isTechnician || ctx.isComercial) return true;
     return ctx.allowedCompanyIds.includes(companyId);
   }
 
@@ -40,7 +40,7 @@ export class MicrosoftController {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     if (companyId && !this.canAccessCompany(ctx, companyId)) return { ok: false, error: 'Forbidden' };
-    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician ? ctx.allowedCompanyIds : undefined;
+    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial ? ctx.allowedCompanyIds : undefined;
     const scopedCompanyId = companyId || (allowedCompanyIds && allowedCompanyIds.length === 1 ? allowedCompanyIds[0] : undefined);
     return this.service.listAgreements({
       companyId: scopedCompanyId,
@@ -64,7 +64,7 @@ export class MicrosoftController {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     if (companyId && !this.canAccessCompany(ctx, companyId)) return { ok: false, error: 'Forbidden' };
-    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician ? ctx.allowedCompanyIds : undefined;
+    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial ? ctx.allowedCompanyIds : undefined;
     const scopedCompanyId = companyId || (allowedCompanyIds && allowedCompanyIds.length === 1 ? allowedCompanyIds[0] : undefined);
     return this.service.getOverviewContext({
       provider,
@@ -108,7 +108,7 @@ export class MicrosoftController {
   async createAgreement(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     if (!this.canAccessCompany(ctx, body?.companyId)) return { ok: false, error: 'Forbidden' };
     return this.service.createAgreement(body, ctx.userId);
   }
@@ -120,7 +120,7 @@ export class MicrosoftController {
     const current = await this.service.getAgreement(id);
     if (!current.ok) return current;
     if (!this.canAccessCompany(ctx, (current.data as any)?.companyId)) return { ok: false, error: 'Forbidden' };
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.updateAgreement(id, body, ctx.userId);
   }
 
@@ -131,7 +131,7 @@ export class MicrosoftController {
     const current = await this.service.getAgreement(id);
     if (!current.ok) return current;
     if (!this.canAccessCompany(ctx, (current.data as any)?.companyId)) return { ok: false, error: 'Forbidden' };
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.removeAgreement(id);
   }
 
@@ -142,7 +142,7 @@ export class MicrosoftController {
     const current = await this.service.getAgreement(id);
     if (!current.ok) return current;
     if (!this.canAccessCompany(ctx, (current.data as any)?.companyId)) return { ok: false, error: 'Forbidden' };
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.addAgreementDocument(id, body);
   }
 
@@ -150,7 +150,7 @@ export class MicrosoftController {
   async removeDocument(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.removeAgreementDocument(id);
   }
 
@@ -163,7 +163,7 @@ export class MicrosoftController {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     if (companyId && !this.canAccessCompany(ctx, companyId)) return { ok: false, error: 'Forbidden' };
-    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician ? ctx.allowedCompanyIds : undefined;
+    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial ? ctx.allowedCompanyIds : undefined;
     const scopedCompanyId = companyId || (allowedCompanyIds && allowedCompanyIds.length === 1 ? allowedCompanyIds[0] : undefined);
     return this.service.listUpcoming({
       companyId: scopedCompanyId,
@@ -181,7 +181,7 @@ export class MicrosoftController {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
     if (companyId && !this.canAccessCompany(ctx, companyId)) return { ok: false, error: 'Forbidden' };
-    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician ? ctx.allowedCompanyIds : undefined;
+    const allowedCompanyIds = !ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial ? ctx.allowedCompanyIds : undefined;
     const scopedCompanyId = companyId || (allowedCompanyIds && allowedCompanyIds.length === 1 ? allowedCompanyIds[0] : undefined);
     return this.service.listRenewals({
       companyId: scopedCompanyId,
@@ -194,7 +194,7 @@ export class MicrosoftController {
   async listConnections(@Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.listConnections();
   }
 
@@ -202,7 +202,7 @@ export class MicrosoftController {
   async saveConnection(@Param('provider') provider: string, @Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.saveConnection(provider, body);
   }
 
@@ -210,7 +210,7 @@ export class MicrosoftController {
   async testConnection(@Param('provider') provider: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.testConnection(provider);
   }
 
@@ -218,7 +218,7 @@ export class MicrosoftController {
   async syncProvider(@Param('provider') provider: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.syncProvider(provider);
   }
 
@@ -230,7 +230,7 @@ export class MicrosoftController {
   ) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.setSyncSchedule(provider, { enabled: !!body?.enabled, intervalHours: body?.intervalHours });
   }
 
@@ -243,7 +243,7 @@ export class MicrosoftController {
   ) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.listCustomerMaps({ provider, companyId, matchStatus });
   }
 
@@ -251,7 +251,7 @@ export class MicrosoftController {
   async saveCustomerMap(@Body() body: any, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.saveCustomerMap(body);
   }
 
@@ -259,7 +259,7 @@ export class MicrosoftController {
   async confirmCustomerMap(@Param('id') id: string, @Body() body: { companyId: string; notes?: string }, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.confirmCustomerMap(id, body.companyId, body.notes);
   }
 
@@ -267,7 +267,7 @@ export class MicrosoftController {
   async ignoreCustomerMap(@Param('id') id: string, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.ignoreCustomerMap(id);
   }
 
@@ -275,7 +275,7 @@ export class MicrosoftController {
   async reviewCustomerMap(@Param('id') id: string, @Body() body: { notes?: string }, @Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.markCustomerMapForReview(id, body?.notes);
   }
 
@@ -288,7 +288,7 @@ export class MicrosoftController {
   ) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    if (!ctx.isAdmin && !ctx.isTechnician) return { ok: false, error: 'Forbidden' };
+    if (!ctx.isAdmin && !ctx.isTechnician && !ctx.isComercial) return { ok: false, error: 'Forbidden' };
     return this.service.listSyncRuns(provider, page ? Number(page) : 1, pageSize ? Number(pageSize) : undefined);
   }
 }

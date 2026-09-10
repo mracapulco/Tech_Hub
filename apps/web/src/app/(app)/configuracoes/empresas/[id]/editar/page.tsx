@@ -117,10 +117,11 @@ export default function EmpresaEditarPage() {
       const memberships = (res?.data?.memberships || []) as { role: string; companyId: string }[];
       const admin = memberships.some((m) => m.role === 'ADMIN');
       const tech = memberships.some((m) => m.role === 'TECHNICIAN');
+      const comercial = memberships.some((m) => m.role === 'COMERCIAL');
       const hasCompany = memberships.some((m) => m.companyId === id);
       setIsAdmin(admin);
       setIsTech(tech);
-      setCanEdit(admin || tech || hasCompany);
+      setCanEdit(admin || tech || comercial || hasCompany);
     } catch {
       setIsAdmin(false);
       setIsTech(false);

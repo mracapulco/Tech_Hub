@@ -41,8 +41,8 @@ export class CompaniesController {
   async list(@Headers('authorization') authorization?: string) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    // Lista empresas conforme permissões: ADMIN/TECHNICIAN veem todas, demais apenas seus vínculos
-    const items = (ctx.isAdmin || ctx.isTechnician)
+    // Lista empresas conforme permissões: ADMIN/TECHNICIAN/COMERCIAL veem todas, demais apenas seus vínculos
+    const items = (ctx.isAdmin || ctx.isTechnician || ctx.isComercial)
       ? await this.prisma.company.findMany({ orderBy: { name: 'asc' } })
       : await this.prisma.company.findMany({
           where: { id: { in: ctx.allowedCompanyIds } },
@@ -121,8 +121,8 @@ export class CompaniesController {
     if (!ctx.ok) return ctx;
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
-    // Verifica acesso: ADMIN/TECHNICIAN ou vínculo à empresa
-    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(id);
+    // Verifica acesso: ADMIN/TECHNICIAN/COMERCIAL ou vínculo à empresa
+    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.isComercial || ctx.allowedCompanyIds.includes(id);
     if (!hasAccess) return { ok: false, error: 'Forbidden' };
     return { ok: true, data: company };
   }
@@ -136,8 +136,8 @@ export class CompaniesController {
     if (!ctx.ok) return ctx;
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) return { ok: false, error: 'Empresa não encontrada.' };
-    // Permite ADMIN/TECHNICIAN ou usuário com vínculo à empresa
-    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(id);
+    // Permite ADMIN/TECHNICIAN/COMERCIAL ou usuário com vínculo à empresa
+    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.isComercial || ctx.allowedCompanyIds.includes(id);
     if (!hasAccess) return { ok: false, error: 'Forbidden' };
     const memberships = await this.prisma.userCompanyMembership.findMany({
       where: { companyId: id },
@@ -164,7 +164,7 @@ export class CompaniesController {
   ) {
     const ctx = await this.getCtx(authorization);
     if (!ctx.ok) return ctx;
-    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.allowedCompanyIds.includes(id);
+    const hasAccess = ctx.isAdmin || ctx.isTechnician || ctx.isComercial || ctx.allowedCompanyIds.includes(id);
     if (!hasAccess) return { ok: false, error: 'Forbidden' };
     const data = {
       cnpj: body.cnpj ? onlyDigits(body.cnpj) : null,

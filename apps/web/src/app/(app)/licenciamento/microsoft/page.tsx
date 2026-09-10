@@ -120,7 +120,7 @@ export default function MicrosoftLicPage() {
           const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (res?.data?.memberships || []) as { role: string }[];
           const isGlobalAdmin = !!res?.data?.isGlobalAdmin;
-          setIsAdminOrTech(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN" || item.role === "TECHNICIAN"));
+          setIsAdminOrTech(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN" || item.role === "TECHNICIAN" || item.role === "COMERCIAL"));
         } catch {}
       }
 

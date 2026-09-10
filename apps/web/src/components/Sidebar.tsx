@@ -15,6 +15,7 @@ export default function Sidebar() {
   const user = typeof window !== 'undefined' ? getUser() : null;
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isComercial, setIsComercial] = useState<boolean>(false);
   const [openSection, setOpenSection] = useState<SidebarSection>(null);
   const [openGestaoSubmenu, setOpenGestaoSubmenu] = useState<GestaoSubmenu>(null);
 
@@ -38,6 +39,7 @@ export default function Sidebar() {
     const token = typeof window !== 'undefined' ? getToken() : null;
     if (!token || !user?.id) {
       setIsAdmin(false);
+      setIsComercial(false);
       return;
     }
     (async () => {
@@ -45,8 +47,10 @@ export default function Sidebar() {
         const res = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
         const memberships = (res?.data?.memberships || []) as { role: string }[];
         setIsAdmin(memberships.some((m) => m.role === 'ADMIN'));
+        setIsComercial(memberships.some((m) => m.role === 'COMERCIAL'));
       } catch {
         setIsAdmin(false);
+        setIsComercial(false);
       }
     })();
   }, [user?.id]);
@@ -126,36 +130,46 @@ export default function Sidebar() {
               </svg>
             </summary>
             <div className="mt-1 ml-6 space-y-1">
-              <Link href="/ipam" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="IPAM">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <circle cx="12" cy="12" r="9" strokeWidth="2" />
-                </svg>
-                <span>IPAM</span>
-              </Link>
-              <Link href="/ipam/sites" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Sites">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M3 21V7l9-4 9 4v14H3z" strokeWidth="2" />
-                </svg>
-                <span>Sites</span>
-              </Link>
-              <Link href="/ipam/vlans" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="VLANs">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>VLANs</span>
-              </Link>
-              <Link href="/gestao/backup" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Backup">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>Backup</span>
-              </Link>
-              <Link href="/gestao/adfs" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="AD / File Server">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 4h16v6H4zM4 12h16v8H4z" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>AD / File Server</span>
-              </Link>
+              {!isComercial && (
+                <>
+                  <Link href="/ipam" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="IPAM">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <circle cx="12" cy="12" r="9" strokeWidth="2" />
+                    </svg>
+                    <span>IPAM</span>
+                  </Link>
+                  <Link href="/ipam/sites" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Sites">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M3 21V7l9-4 9 4v14H3z" strokeWidth="2" />
+                    </svg>
+                    <span>Sites</span>
+                  </Link>
+                  <Link href="/ipam/vlans" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="VLANs">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>VLANs</span>
+                  </Link>
+                  <Link href="/gestao/backup" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Backup">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>Backup</span>
+                  </Link>
+                  <Link href="/gestao/adfs" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="AD / File Server">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 4h16v6H4zM4 12h16v8H4z" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>AD / File Server</span>
+                  </Link>
+                  <Link href="/gestao/nobreaks" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-primary/10" title="Nobreaks">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>Nobreaks</span>
+                  </Link>
+                </>
+              )}
               <details open={openGestaoSubmenu === 'licenciamento'}>
                 <summary
                   className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10"
@@ -208,36 +222,46 @@ export default function Sidebar() {
             </Link>
             <div className="absolute left-full top-0 ml-2 w-48 bg-card border border-border rounded shadow p-2 hidden group-hover:block z-50 text-text">
               <div className="text-xs text-muted px-1 pb-1">Gestão</div>
-              <Link href="/ipam" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="IPAM">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <circle cx="12" cy="12" r="9" strokeWidth="2" />
-                </svg>
-                <span>IPAM</span>
-              </Link>
-              <Link href="/ipam/sites" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Sites">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M3 21V7l9-4 9 4v14H3z" strokeWidth="2" />
-                </svg>
-                <span>Sites</span>
-              </Link>
-              <Link href="/ipam/vlans" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="VLANs">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>VLANs</span>
-              </Link>
-              <Link href="/gestao/backup" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Backup">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>Backup</span>
-              </Link>
-              <Link href="/gestao/adfs" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="AD / File Server">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 4h16v6H4zM4 12h16v8H4z" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>AD / File Server</span>
-              </Link>
+              {!isComercial && (
+                <>
+                  <Link href="/ipam" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="IPAM">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <circle cx="12" cy="12" r="9" strokeWidth="2" />
+                    </svg>
+                    <span>IPAM</span>
+                  </Link>
+                  <Link href="/ipam/sites" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Sites">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M3 21V7l9-4 9 4v14H3z" strokeWidth="2" />
+                    </svg>
+                    <span>Sites</span>
+                  </Link>
+                  <Link href="/ipam/vlans" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="VLANs">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>VLANs</span>
+                  </Link>
+                  <Link href="/gestao/backup" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Backup">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>Backup</span>
+                  </Link>
+                  <Link href="/gestao/adfs" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="AD / File Server">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 4h16v6H4zM4 12h16v8H4z" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>AD / File Server</span>
+                  </Link>
+                  <Link href="/gestao/nobreaks" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Nobreaks">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>Nobreaks</span>
+                  </Link>
+                </>
+              )}
               <div className="mt-2 text-xs text-muted px-2">Licenciamento</div>
               <Link href="/licenciamento/firewall" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Firewall">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
@@ -261,8 +285,8 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Segurança → Maturidade / Vulnerabilidades */}
-        {!collapsed ? (
+        {/* Segurança → Maturidade / Vulnerabilidades (não exibido para o papel Comercial) */}
+        {!isComercial && (!collapsed ? (
           <details open={openSection === 'seguranca'}>
             <summary
               className="cursor-pointer flex items-center justify-between px-2 py-2 rounded hover:bg-primary/10"
@@ -321,7 +345,7 @@ export default function Sidebar() {
               </Link>
             </div>
           </div>
-        )}
+        ))}
 
         {/* Configurações — manter sempre abaixo dos outros itens */}
         {!collapsed ? (
@@ -342,42 +366,48 @@ export default function Sidebar() {
               </svg>
             </summary>
             <div className="mt-1 ml-6 space-y-1">
-              <Link href="/configuracoes/usuarios" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Usuários">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>Usuários</span>
-              </Link>
+              {!isComercial && (
+                <Link href="/configuracoes/usuarios" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Usuários">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                    <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
+                  </svg>
+                  <span>Usuários</span>
+                </Link>
+              )}
               <Link href="/configuracoes/empresas" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Empresas">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
                   <path d="M3 21V7l9-4 9 4v14H3zm9-10l9-4" strokeWidth="2" strokeLinejoin="round" />
                 </svg>
                 <span>Empresas</span>
               </Link>
-              <Link href="/configuracoes/marcas" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Marcas">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>Marcas</span>
-              </Link>
-              <Link href="/configuracoes/dispositivos" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Dispositivos">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M6 3h12v14H6zM9 20h6" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>Dispositivos</span>
-              </Link>
-              <Link href="/configuracoes/tipo-dispositivo" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Tipo de dispositivo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 4h16v6H4zM4 14h10v6H4z" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>Tipo de dispositivo</span>
-              </Link>
-              <Link href="/configuracoes/zabbix" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Zabbix">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>Zabbix</span>
-              </Link>
+              {!isComercial && (
+                <>
+                  <Link href="/configuracoes/marcas" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Marcas">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>Marcas</span>
+                  </Link>
+                  <Link href="/configuracoes/dispositivos" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Dispositivos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M6 3h12v14H6zM9 20h6" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>Dispositivos</span>
+                  </Link>
+                  <Link href="/configuracoes/tipo-dispositivo" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Tipo de dispositivo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 4h16v6H4zM4 14h10v6H4z" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>Tipo de dispositivo</span>
+                  </Link>
+                  <Link href="/configuracoes/zabbix" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="Zabbix">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>Zabbix</span>
+                  </Link>
+                </>
+              )}
               {isAdmin && (
                 <Link href="/configuracoes/ia" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-sidebarHover" title="IA">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
@@ -409,42 +439,48 @@ export default function Sidebar() {
             </Link>
             <div className="absolute left-full top-0 ml-2 w-48 bg-card border border-border rounded shadow p-2 hidden group-hover:block z-50 text-text">
               <div className="text-xs text-muted px-1 pb-1">Configurações</div>
-              <Link href="/configuracoes/usuarios" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Usuários">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>Usuários</span>
-              </Link>
+              {!isComercial && (
+                <Link href="/configuracoes/usuarios" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Usuários">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                    <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-9 9c0-3.3 5.7-5 9-5s9 1.7 9 5v1H3v-1z" strokeWidth="2" strokeLinejoin="round" />
+                  </svg>
+                  <span>Usuários</span>
+                </Link>
+              )}
               <Link href="/configuracoes/empresas" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Empresas">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
                   <path d="M3 21V7l9-4 9 4v14H3zm9-10l9-4" strokeWidth="2" strokeLinejoin="round" />
                 </svg>
                 <span>Empresas</span>
               </Link>
-              <Link href="/configuracoes/marcas" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Marcas">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>Marcas</span>
-              </Link>
-              <Link href="/configuracoes/dispositivos" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Dispositivos">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M6 3h12v14H6zM9 20h6" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>Dispositivos</span>
-              </Link>
-              <Link href="/configuracoes/tipo-dispositivo" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Tipo de dispositivo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 4h16v6H4zM4 14h10v6H4z" strokeWidth="2" strokeLinejoin="round" />
-                </svg>
-                <span>Tipo de dispositivo</span>
-              </Link>
-              <Link href="/configuracoes/zabbix" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Zabbix">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                  <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <span>Zabbix</span>
-              </Link>
+              {!isComercial && (
+                <>
+                  <Link href="/configuracoes/marcas" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Marcas">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>Marcas</span>
+                  </Link>
+                  <Link href="/configuracoes/dispositivos" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Dispositivos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M6 3h12v14H6zM9 20h6" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>Dispositivos</span>
+                  </Link>
+                  <Link href="/configuracoes/tipo-dispositivo" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Tipo de dispositivo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 4h16v6H4zM4 14h10v6H4z" strokeWidth="2" strokeLinejoin="round" />
+                    </svg>
+                    <span>Tipo de dispositivo</span>
+                  </Link>
+                  <Link href="/configuracoes/zabbix" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="Zabbix">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path d="M4 6h16M4 12h12M4 18h8" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <span>Zabbix</span>
+                  </Link>
+                </>
+              )}
               {isAdmin && (
                 <Link href="/configuracoes/ia" className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100" title="IA">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">

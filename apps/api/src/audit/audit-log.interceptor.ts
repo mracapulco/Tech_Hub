@@ -10,9 +10,10 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Rotas com auditoria própria (semântica de negócio mais rica) — evita duplicar entradas.
 const EXCLUDED_PREFIXES = ['/auth', '/audit-logs'];
 
-function roleLabel(ctx: { isAdmin: boolean; isTechnician: boolean; isClient: boolean }): string {
+function roleLabel(ctx: { isAdmin: boolean; isTechnician: boolean; isClient: boolean; isComercial: boolean }): string {
   if (ctx.isAdmin) return 'ADMIN';
   if (ctx.isTechnician) return 'TECHNICIAN';
+  if (ctx.isComercial) return 'COMERCIAL';
   if (ctx.isClient) return 'CLIENT';
   return 'UNKNOWN';
 }

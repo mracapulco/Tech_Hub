@@ -50,6 +50,11 @@ export type RequestContext =
       isAdmin: boolean;
       isTechnician: boolean;
       isClient: boolean;
+      /** Papel comercial: acesso global (como ADMIN/TECHNICIAN) restrito a Empresas e
+       *  Licenciamento (Firewall/Microsoft) — concedido explicitamente nesses controllers.
+       *  Em todo o resto, `allowedCompanyIds` vem vazio para esse papel (ver abaixo), então
+       *  qualquer checagem baseada nele nega acesso por padrão, sem precisar de guard extra. */
+      isComercial: boolean;
       isStaff: boolean;
       allowedCompanyIds: string[];
     }
@@ -89,8 +94,14 @@ export async function getRequestContext(
   const isAdmin = isGlobalAdmin || memberships.some((m) => m.role === 'ADMIN');
   const isTechnician = memberships.some((m) => m.role === 'TECHNICIAN');
   const isClient = memberships.some((m) => m.role === 'CLIENT');
+  const isComercial = memberships.some((m) => m.role === 'COMERCIAL');
   const isStaff = isAdmin || isTechnician;
-  const allowedCompanyIds = memberships.map((m) => m.companyId);
+  // COMERCIAL não é escopado por empresa vinculada: seu acesso global é concedido
+  // explicitamente nos controllers de Empresas/Licenciamento via ctx.isComercial.
+  // Excluí-lo daqui garante que, em qualquer outro módulo, ele não herde acesso.
+  const allowedCompanyIds = memberships
+    .filter((m) => m.role !== 'COMERCIAL')
+    .map((m) => m.companyId);
 
-  return { ok: true, userId, username, isGlobalAdmin, isAdmin, isTechnician, isClient, isStaff, allowedCompanyIds };
+  return { ok: true, userId, username, isGlobalAdmin, isAdmin, isTechnician, isClient, isComercial, isStaff, allowedCompanyIds };
 }

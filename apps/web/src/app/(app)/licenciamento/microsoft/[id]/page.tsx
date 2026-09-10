@@ -33,7 +33,7 @@ export default function MicrosoftAgreementViewPage({ params }: { params: { id: s
           const userRes = await apiGet<{ ok: boolean; data?: any }>(`/users/${user.id}`, token);
           const memberships = (userRes?.data?.memberships || []) as { role: string }[];
           const isGlobalAdmin = !!userRes?.data?.isGlobalAdmin;
-          setIsAdminOrTech(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN" || item.role === "TECHNICIAN"));
+          setIsAdminOrTech(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN" || item.role === "TECHNICIAN" || item.role === "COMERCIAL"));
           setIsAdmin(isGlobalAdmin || memberships.some((item) => item.role === "ADMIN"));
         } catch {}
       }
