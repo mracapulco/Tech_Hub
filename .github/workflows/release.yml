@@ -25,7 +25,15 @@ jobs:
             found {print}
           ' CHANGELOG.md > RELEASE_NOTES.md
           if [ ! -s RELEASE_NOTES.md ]; then
-            echo "Release notes for ${TAG} not found in CHANGELOG.md." > RELEASE_NOTES.md
+            {
+              echo "Release notes for ${TAG} not found in CHANGELOG.md."
+              echo
+              echo "DEBUG: TAG=[$TAG] VERSION=[$VERSION]"
+              echo "DEBUG: awk=$(command -v awk) $(awk --version 2>&1 | head -1)"
+              echo "DEBUG: CHANGELOG.md bytes=$(wc -c < CHANGELOG.md) md5=$(md5sum CHANGELOG.md)"
+              echo "DEBUG: line 7 of CHANGELOG.md follows (od -c, first 40 bytes):"
+              sed -n '7p' CHANGELOG.md | od -c | head -5
+            } > RELEASE_NOTES.md
           fi
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
